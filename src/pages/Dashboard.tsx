@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Award,
   Bookmark,
+  Crown,
   Gauge,
   Heart,
   MessageCircle,
@@ -11,12 +12,12 @@ import {
   Send,
   ShieldCheck,
   Star,
+  TrendingUp,
 } from 'lucide-react';
 import { authService, dbService } from '../services/firebase';
 import type { CarData, UserProfile } from '../services/reputationService';
 import { BADGES, getGarageRank } from '../services/reputationService';
 import BadgeEmblem from '../components/BadgeEmblem';
-import RankBadge from '../components/RankBadge';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -64,14 +65,21 @@ export default function Dashboard() {
   const rankInfo = getGarageRank(profile.garageReputation);
   const featuredCar = cars[0];
   const storyCars = cars.length > 0 ? cars : [];
+  const trendingTags = [
+    ['#pistonlife', '12.4K posts'],
+    ['#jdm', '8.7K posts'],
+    ['#tracklife', '6.1K posts'],
+    ['#supercars', '5.4K posts'],
+    ['#builtnotbought', '3.2K posts'],
+  ];
 
   return (
-    <div className="grid gap-6 animate-fadeIn lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-6 animate-fadeIn xl:grid-cols-[minmax(0,1fr)_320px]">
       <section className="min-w-0 space-y-5">
-        <div className="glass-panel rounded-xl p-4">
-          <div className="flex gap-4 overflow-x-auto pb-1">
+        <div className="rounded-xl border hairline bg-black/40 p-4">
+          <div className="flex gap-5 overflow-x-auto pb-1">
             <Link to="/upload" className="w-20 shrink-0 text-center">
-              <div className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-dashed border-brand-orange/70 bg-brand-orange/10 text-brand-orange transition hover:bg-brand-orange/16">
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-dashed border-brand-orange/70 bg-black text-brand-orange transition hover:bg-brand-orange/10">
                 <Plus size={22} />
               </div>
               <div className="mt-2 truncate text-[11px] font-semibold text-zinc-400">Your Story</div>
@@ -79,7 +87,7 @@ export default function Dashboard() {
 
             {storyCars.slice(0, 8).map((car) => (
               <div key={car.id} className="w-20 shrink-0 text-center">
-                <div className="mx-auto h-16 w-16 rounded-full border-2 border-brand-orange p-0.5">
+                <div className="mx-auto h-16 w-16 rounded-full border-2 border-brand-orange p-0.5 shadow-[0_0_20px_rgba(232,93,4,0.12)]">
                   <img
                     src={car.photos[0]}
                     alt={`${car.make} ${car.model}`}
@@ -213,60 +221,79 @@ export default function Dashboard() {
         )}
       </section>
 
-      <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+      <aside className="space-y-5 xl:sticky xl:top-24 xl:self-start">
         <div className="glass-panel rounded-xl p-5">
-          <div className="flex items-center gap-3">
-            <img
-              src={profile.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400'}
-              alt={profile.displayName}
-              className="h-16 w-16 rounded-full border border-brand-orange/45 object-cover"
-            />
-            <div className="min-w-0">
-              <div className="truncate text-sm font-bold text-white">{profile.displayName}</div>
-              <div className="truncate text-xs text-zinc-500">@{profile.username}</div>
-              <div className="mt-2">
-                <RankBadge rank={profile.rank} size="sm" />
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                Garage Reputation
+              </div>
+              <div className="mt-2 font-display text-5xl leading-none tracking-wide text-brand-orange">
+                {profile.garageReputation.toLocaleString()}
+                <span className="ml-1 text-xl text-white">GR</span>
+              </div>
+              <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-brand-orange">
+                <TrendingUp size={13} />
+                <span>1,250 this week</span>
               </div>
             </div>
+            <svg viewBox="0 0 120 70" className="h-20 w-28 text-brand-orange">
+              <polyline
+                points="4,62 20,50 35,55 50,38 66,43 82,24 96,28 116,8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M4 62 L20 50 L35 55 L50 38 L66 43 L82 24 L96 28 L116 8 V70 H4 Z" fill="currentColor" opacity="0.12" />
+            </svg>
           </div>
+        </div>
 
-          <div className="mt-5 rounded-xl border border-brand-orange/35 bg-brand-orange/10 p-4">
-            <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-              Garage Reputation
+        <div className="glass-panel rounded-xl p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Rank</div>
+              <div className="mt-2 text-2xl font-bold text-white">{rankInfo.current.title}</div>
             </div>
-            <div className="mt-1 font-display text-5xl leading-none tracking-wide text-brand-orange">
-              {profile.garageReputation.toLocaleString()}
-              <span className="ml-1 text-xl text-white">GR</span>
+            <div className="grid h-14 w-14 place-items-center rounded-xl border border-brand-orange/45 bg-brand-orange/10 text-brand-orange">
+              <Crown size={25} />
             </div>
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-black">
-              <div className="h-full rounded-full bg-brand-orange" style={{ width: `${rankInfo.progress}%` }} />
-            </div>
-            <div className="mt-2 flex justify-between text-[10px] font-semibold text-zinc-500">
-              <span>{rankInfo.current.title}</span>
-              <span>{rankInfo.next ? `${rankInfo.grNeededForNext.toLocaleString()} GR left` : 'Max rank'}</span>
-            </div>
+          </div>
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-black">
+            <div className="h-full rounded-full bg-brand-orange" style={{ width: `${rankInfo.progress}%` }} />
           </div>
         </div>
 
         <div className="glass-panel rounded-xl p-5">
           <div className="mb-4 flex items-center gap-2">
             <Award size={17} className="text-brand-orange" />
-            <h2 className="font-display text-2xl tracking-wide text-white">Badges</h2>
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Badges</h2>
           </div>
           <div className="grid grid-cols-5 gap-2">
             {BADGES.map((badge) => {
               const isEarned = profile.badges.includes(badge.id);
               return (
-                <div
-                  key={badge.id}
-                  title={badge.name}
-                  className="flex justify-center"
-                >
+                <div key={badge.id} title={badge.name} className="flex justify-center">
                   <BadgeEmblem badgeId={badge.id} label={badge.name} earned={isEarned} size="sm" />
                 </div>
               );
             })}
           </div>
+        </div>
+
+        <div className="glass-panel rounded-xl p-5">
+          <div className="mb-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Trending</div>
+          <div className="space-y-3">
+            {trendingTags.map(([tag, count]) => (
+              <div key={tag} className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-zinc-200">{tag}</span>
+                <span className="text-zinc-500">{count}</span>
+              </div>
+            ))}
+          </div>
+          <button className="mt-5 text-xs font-bold text-brand-orange">See more</button>
         </div>
       </aside>
     </div>

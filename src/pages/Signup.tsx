@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/firebase';
 import { User, Lock, Mail, ChevronRight, AlertTriangle } from 'lucide-react';
+import PistonLogo from '../components/PistonLogo';
 
 export default function Signup() {
   const [email, setEmail] = useState('');
@@ -45,9 +46,7 @@ export default function Signup() {
     <div className="min-h-[80vh] flex flex-col items-center justify-center py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-6">
         <div className="text-center">
-          <span className="bg-brand-orange text-black font-black text-3xl px-4 py-1.5 rounded-md font-display tracking-widest inline-block">
-            PISTON
-          </span>
+          <PistonLogo size="lg" className="justify-center" />
           <h2 className="mt-4 text-2xl font-display font-extrabold text-white uppercase tracking-wider">
             Create Build Profile
           </h2>
@@ -140,7 +139,7 @@ export default function Signup() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="•••••••• (Min 6 characters)"
+                  placeholder="Password (Min 6 characters)"
                   disabled={loading}
                   className="block w-full pl-10 pr-3 py-2 field-surface rounded-lg text-sm text-white placeholder-zinc-600 focus:outline-none"
                 />
