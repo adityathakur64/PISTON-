@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-bg-dark: #050505;
+  --color-bg-card: #101010;
+  --color-bg-input: #171717;
+  --color-brand-orange: #e85d04;
+  --color-brand-orange-hover: #ff7417;
+  --color-brand-orange-glow: rgba(232, 93, 4, 0.16);
+  --color-brand-cyan: #aaaaaa;
+  --color-track-metal: #aaaaaa;
+  
+  --font-display: "Bebas Neue", "Oswald", sans-serif;
+  --font-sans: "Inter", sans-serif;
+}
+
+/* Base custom styles */
+body {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(232, 93, 4, 0.10), transparent 24rem),
+    linear-gradient(180deg, #0b0b0b 0%, #050505 24rem),
+    #050505;
+  color: #f3f4f6;
+  font-family: "Inter", sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Carbon grid pattern for that mechanical/garage vibe */
+.bg-grid-pattern {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.014) 1px, transparent 1px);
+}
+
+.glass-panel {
+  background: rgba(16, 16, 16, 0.94);
+  border: 1px solid rgba(170, 170, 170, 0.15);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.glass-panel:hover {
+  border-color: rgba(232, 93, 4, 0.34);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.38);
+  transform: translateY(-2px);
+}
+
+.field-surface {
+  background: rgba(23, 23, 23, 0.96);
+  border: 1px solid rgba(170, 170, 170, 0.16);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.field-surface:focus {
+  border-color: rgba(232, 93, 4, 0.76);
+  box-shadow: 0 0 0 3px rgba(232, 93, 4, 0.12);
+}
+
+.hairline {
+  border-color: rgba(170, 170, 170, 0.14);
+}
+
+.accent-rail {
+  background: linear-gradient(90deg, rgba(232, 93, 4, 0.92), rgba(232, 93, 4, 0.12));
+}
+
+.animate-fadeIn {
+  animation: fadeIn 260ms ease-out both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #e85d04;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+}

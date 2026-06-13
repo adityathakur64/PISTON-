@@ -1,0 +1,87 @@
+# Implementation Plan - PISTON MVP
+
+PISTON is a gamified automotive reputation platform where users compete for Garage Reputation (GR). This plan details the creation of the Phase 1 MVP.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Firebase Config & Mock Mode**: To ensure the project is immediately runnable and testable, the database and authentication layer will support a **Mock Mode** (using LocalStorage) if Firebase configuration variables are not set in the `.env` file. Once you provide the Firebase credentials, it will seamlessly switch to the real Firebase services.
+> Please review and confirm if this dual-mode design meets your development workflow needs.
+
+> [!TIP]
+> **Scoring Engine Customization**: The GR score calculation uses specific weighted inputs. Below is the proposed model. Let us know if you would like to adjust these default values:
+> - **Vehicle Rarity**: Multiplier based on tier (Common: 1x, Uncommon: 1.2x, Rare: 1.5x, Exotic: 2.0x, Hypercar: 3.0x).
+> - **Estimated Value**: Logarithmic score: `Math.floor(Math.log10(value) * 1000)` (e.g., $10k value = ~4000 pts, $100k value = ~5000 pts).
+> - **Build Quality**: Self-assessed or peer-reviewed grade (1 to 10) × 250 points.
+> - **Modification Level**: Number of modifications × 150 points.
+> - **Verification Status**: Verified vehicles receive a flat +1500 GR bonus.
+
+---
+
+## Proposed Changes
+
+### [Vite & Tailwind Initialization]
+
+We will initialize a new React + TypeScript + Vite project and configure Tailwind CSS.
+
+#### [NEW] [package.json](file:///c:/Users/adity/Desktop/piston/package.json)
+#### [NEW] [tailwind.config.js](file:///c:/Users/adity/Desktop/piston/tailwind.config.js)
+#### [NEW] [src/index.css](file:///c:/Users/adity/Desktop/piston/src/index.css)
+
+### [Core Services]
+
+We will implement the Garage Reputation engine and the Firebase service layer with its LocalStorage mock fallback.
+
+#### [NEW] [reputationService.ts](file:///c:/Users/adity/Desktop/piston/src/services/reputationService.ts)
+Contains `calculateGarageReputation()`, `getGarageRank()`, and definitions for:
+- Street Rookie (0 - 999 GR)
+- Enthusiast (1,000 - 2,499 GR)
+- Builder (2,500 - 4,999 GR)
+- Track Warrior (5,000 - 9,999 GR)
+- Garage Elite (10,000 - 24,999 GR)
+- Exotic Owner (25,000 - 49,999 GR)
+- PISTON Legend (50,000+ GR)
+
+#### [NEW] [firebase.ts](file:///c:/Users/adity/Desktop/piston/src/services/firebase.ts)
+Detects environment variables and exports auth, database, and storage clients (either real Firebase or mock local implementations).
+
+---
+
+### [Components & Layout]
+
+#### [NEW] [Layout.tsx](file:///c:/Users/adity/Desktop/piston/src/components/Layout.tsx)
+Premium, near-black design with a persistent sticky navigation header and bottom bar (optimized for mobile), incorporating orange glows and a clean garage-style aesthetic.
+
+#### [NEW] [ProtectedRoute.tsx](file:///c:/Users/adity/Desktop/piston/src/components/ProtectedRoute.tsx)
+Guards dashboards, upload, and profile pages. Redirects unauthenticated users to the login screen.
+
+#### [NEW] [RankBadge.tsx](file:///c:/Users/adity/Desktop/piston/src/components/RankBadge.tsx)
+Visual badge showing the user's rank with glowing color schemes relative to their status (e.g. orange flame glow for PISTON Legend, carbon-look for Builder).
+
+---
+
+### [Pages]
+
+#### [NEW] [Login.tsx](file:///c:/Users/adity/Desktop/piston/src/pages/Login.tsx) & [Signup.tsx](file:///c:/Users/adity/Desktop/piston/src/pages/Signup.tsx)
+Auth screens with high-contrast forms, premium typography, and seamless transitions.
+
+#### [NEW] [Dashboard.tsx](file:///c:/Users/adity/Desktop/piston/src/pages/Dashboard.tsx)
+Shows the user's current GR, progress bar to the next rank, unlocked badges, and list of owned cars.
+
+#### [NEW] [UploadCar.tsx](file:///c:/Users/adity/Desktop/piston/src/pages/UploadCar.tsx)
+Car upload interface allowing users to upload photo(s), input specifications (make, model, year), build specs (modifications list), and auto-calculate estimated GR score contribution on-the-fly.
+
+#### [NEW] [Leaderboard.tsx](file:///c:/Users/adity/Desktop/piston/src/pages/Leaderboard.tsx)
+Displays the Top 100 global leaderboard, along with visual indicators for local/category leaderboards.
+
+---
+
+## Verification Plan
+
+### Automated Verification
+- Run TypeScript compiler check: `npm run build` to verify there are no compilation or typing issues.
+
+### Manual Verification
+- **Auth Flow**: Sign up, log out, attempt to access dashboard, log in again.
+- **Car Upload & Rep Calculation**: Upload a vehicle, fill in attributes, verify the GR score is updated correctly, and the rank increases if threshold is met.
+- **Leaderboard Integration**: Upload multiple cars on different accounts (using mock mode/different mock users), verify their sorting and rank badges on the Leaderboard page.
