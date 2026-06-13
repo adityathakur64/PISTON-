@@ -1,73 +1,53 @@
-# React + TypeScript + Vite
+# PISTON
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Drive. Share. Rank.**
 
-Currently, two official plugins are available:
+PISTON is a next-generation automotive social platform that combines car culture, social networking, and gamification into a single experience. Unlike traditional social media platforms, PISTON is built around a unique reputation-based ecosystem where users earn status, recognition, and achievements based on the cars they own, build, and showcase.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Users can create profiles, upload their vehicles, share build journeys, and compete within the automotive community through a dynamic **Garage Reputation (GR)** system. Every vehicle and build contributes to a user's standing, unlocking ranks, badges, and leaderboard positions that reflect their automotive identity and influence.
 
-## React Compiler
+## Core Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+* User Authentication and Profiles
+* Car Garage Management
+* Vehicle Photo & Media Uploads
+* Garage Reputation (GR) Scoring System
+* Rank & Badge Progression
+* Global and Regional Leaderboards
+* Car Build Showcases
+* Community Engagement and Recognition
+* AI-Assisted Vehicle Analysis (Future Release)
 
-## Expanding the ESLint configuration
+## Garage Reputation System
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+At the heart of PISTON is the **Garage Reputation (GR)** system.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Users earn reputation points based on multiple factors including:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+* Vehicle rarity
+* Vehicle value
+* Build quality
+* Modification level
+* Community engagement
+* Verification status
+* Platform activity
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+As users increase their GR, they unlock higher ranks, exclusive badges, and greater visibility throughout the platform.
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Rank Progression
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+* Street Rookie
+* Enthusiast
+* Builder
+* Track Warrior
+* Garage Elite
+* Exotic Owner
+* PISTON Legend
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Mission
+
+PISTON aims to become the world's leading automotive reputation platform, giving enthusiasts a place to showcase their passion, build their status, and connect with like-minded drivers through a shared love of cars.
+
+Whether you own a daily driver, a track weapon, a heavily modified build, or an exotic supercar, PISTON provides a platform where every enthusiast can build their automotive legacy.
+
+**Your Car. Your Status.**
