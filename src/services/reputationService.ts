@@ -14,13 +14,32 @@ export interface CarData {
   createdAt: number;
   calculatedScore?: number;
   ownerUid?: string;
+  userId?: string;
+  username?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video';
+  caption?: string;
+  hashtags?: string[];
+  carDetails?: {
+    make: string;
+    model: string;
+    year: number;
+  };
+  likes?: string[];
+  commentsCount?: number;
 }
 
 export interface StoryData {
   id: string;
-  caption: string;
+  userId?: string;
+  username?: string;
+  userAvatar?: string;
+  caption?: string;
   mediaUrl: string;
+  mediaType: 'image' | 'video';
   createdAt: number;
+  expiresAt: number;
+  viewedBy: string[];
   ownerUid?: string;
 }
 

@@ -117,12 +117,12 @@ export default function Dashboard() {
       <section className="min-w-0 space-y-5">
         <div className="rounded-xl border hairline bg-black/40 p-4">
           <div className="flex gap-5 overflow-x-auto pb-1">
-            <button type="button" className="w-20 shrink-0 text-center" title="Create story">
+            <Link to="/upload-story" className="w-20 shrink-0 text-center" title="Create story">
               <div className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-dashed border-brand-orange/70 bg-black text-brand-orange transition hover:bg-brand-orange/10">
                 <Plus size={22} />
               </div>
               <div className="mt-2 truncate text-[11px] font-semibold text-zinc-400">Your Story</div>
-            </button>
+            </Link>
 
             {storyCreators.slice(0, 10).map((story) => (
               <button
@@ -185,11 +185,22 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <img
-                src={selectedStory.mediaUrl}
-                alt={selectedStory.caption}
-                className="h-full w-full object-cover"
-              />
+              {selectedStory.mediaType === 'video' ? (
+                <video
+                  src={selectedStory.mediaUrl}
+                  className="h-full w-full object-cover"
+                  autoPlay
+                  muted
+                  playsInline
+                  controls
+                />
+              ) : (
+                <img
+                  src={selectedStory.mediaUrl}
+                  alt={selectedStory.caption || 'Story media'}
+                  className="h-full w-full object-cover"
+                />
+              )}
 
               <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/72 to-transparent p-5 pt-20">
                 <div className="mb-3 flex flex-wrap items-center gap-2">

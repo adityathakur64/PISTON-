@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import UploadCar from './pages/UploadCar';
+import UploadStory from './pages/UploadStory';
 import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
 import Login from './pages/Login';
@@ -26,6 +27,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <UploadCar />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/upload-story"
+            element={
+              <ProtectedRoute>
+                <UploadStory />
               </ProtectedRoute>
             }
           />

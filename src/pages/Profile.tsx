@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams } from 'react-router-dom';
-import { Award, ShieldCheck, Edit3, Save, Star, Calendar, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { Award, ShieldCheck, Edit3, Save, Star, Calendar, Trash2, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { authService, dbService } from '../services/firebase';
 import type { UserProfile, CarData, StoryData } from '../services/reputationService';
 import { BADGES } from '../services/reputationService';
@@ -293,7 +293,7 @@ export default function Profile() {
       </div>
 
       {/* Stories */}
-      {stories.length > 0 && (
+      {(isOwnProfile || stories.length > 0) && (
         <div className="glass-panel rounded-xl p-5">
           <div className="mb-4 flex items-center justify-between border-b hairline pb-3">
             <div>
@@ -310,6 +310,17 @@ export default function Profile() {
           </div>
 
           <div className="flex gap-4 overflow-x-auto pb-1">
+            {isOwnProfile && (
+              <Link to="/upload-story" className="w-24 shrink-0 text-left" title="Create story">
+                <div className="mx-auto grid h-20 w-20 place-items-center rounded-full border-2 border-dashed border-brand-orange/70 bg-black text-brand-orange transition hover:bg-brand-orange/10">
+                  <Plus size={22} />
+                </div>
+                <div className="mt-2 truncate text-center text-[11px] font-semibold text-zinc-400">
+                  Your Story
+                </div>
+              </Link>
+            )}
+
             {stories.map((story, index) => (
               <button
                 key={`profile-story-${story.id}`}
@@ -320,12 +331,12 @@ export default function Profile() {
                 <div className="relative mx-auto h-20 w-20 rounded-full border-2 border-brand-orange p-0.5 shadow-[0_0_20px_rgba(232,93,4,0.12)]">
                   <img
                     src={story.mediaUrl}
-                    alt={story.caption}
+                    alt={story.caption || 'Story media'}
                     className="h-full w-full rounded-full object-cover"
                   />
                 </div>
                 <div className="mt-2 truncate text-center text-[11px] font-semibold text-zinc-400">
-                  {story.caption}
+                  {story.caption || 'Story'}
                 </div>
               </button>
             ))}
@@ -372,11 +383,22 @@ export default function Profile() {
               </button>
             </div>
 
-            <img
-              src={selectedStory.mediaUrl}
-              alt={selectedStory.caption}
-              className="h-full w-full object-cover"
-            />
+            {selectedStory.mediaType === 'video' ? (
+              <video
+                src={selectedStory.mediaUrl}
+                className="h-full w-full object-cover"
+                autoPlay
+                muted
+                playsInline
+                controls
+              />
+            ) : (
+              <img
+                src={selectedStory.mediaUrl}
+                alt={selectedStory.caption || 'Story media'}
+                className="h-full w-full object-cover"
+              />
+            )}
 
             <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/72 to-transparent p-5 pt-20">
               <div className="mb-3 flex flex-wrap items-center gap-2">

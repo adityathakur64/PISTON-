@@ -17,7 +17,8 @@ import {
   collection, 
   getDocs, 
   query, 
-  orderBy
+  orderBy,
+  where
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { CarData, StoryData, UserProfile } from './reputationService';
@@ -205,30 +206,54 @@ const SEED_CARS: CarData[] = [
 const SEED_STORIES: StoryData[] = [
   {
     id: 'seed_story_1_1',
+    userId: 'seed_user_1',
+    username: 'carbon_porsche',
+    userAvatar: 'https://images.unsplash.com/photo-1614162692292-7ac56d7f7f1e?auto=format&fit=crop&q=80&w=400',
     caption: 'Morning warmup before the canyon run.',
     mediaUrl: 'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&q=80&w=800',
+    mediaType: 'image',
     createdAt: Date.now() - 2 * 60 * 60 * 1000,
+    expiresAt: Date.now() + 22 * 60 * 60 * 1000,
+    viewedBy: [],
     ownerUid: 'seed_user_1'
   },
   {
     id: 'seed_story_2_1',
+    userId: 'seed_user_2',
+    username: 'drift_shogun',
+    userAvatar: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&q=80&w=400',
     caption: 'Dialing in boost after the latest tune.',
     mediaUrl: 'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&q=80&w=800',
+    mediaType: 'image',
     createdAt: Date.now() - 4 * 60 * 60 * 1000,
+    expiresAt: Date.now() + 20 * 60 * 60 * 1000,
+    viewedBy: [],
     ownerUid: 'seed_user_2'
   },
   {
     id: 'seed_story_3_1',
+    userId: 'seed_user_3',
+    username: 'muscle_chef',
+    userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400',
     caption: 'Fresh parts day in the garage.',
     mediaUrl: 'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&q=80&w=800',
+    mediaType: 'image',
     createdAt: Date.now() - 7 * 60 * 60 * 1000,
+    expiresAt: Date.now() + 17 * 60 * 60 * 1000,
+    viewedBy: [],
     ownerUid: 'seed_user_3'
   },
   {
     id: 'seed_story_4_1',
+    userId: 'seed_user_4',
+    username: 'piston_legend_real',
+    userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=400',
     caption: 'Track prep checklist is finally done.',
     mediaUrl: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=800',
+    mediaType: 'image',
     createdAt: Date.now() - 11 * 60 * 60 * 1000,
+    expiresAt: Date.now() + 13 * 60 * 60 * 1000,
+    viewedBy: [],
     ownerUid: 'seed_user_4'
   }
 ];
@@ -272,6 +297,18 @@ const getCarOwnerUid = (car: CarData): string | undefined => {
 
 const getMockUserCars = (cars: CarData[], uid: string): CarData[] => {
   return cars.filter((car) => getCarOwnerUid(car) === uid);
+};
+
+const isActiveStory = (story: StoryData): boolean => {
+  return getStoryExpiresAt(story) > Date.now();
+};
+
+const getStoryOwnerUid = (story: StoryData): string | undefined => {
+  return story.userId || story.ownerUid;
+};
+
+const getStoryExpiresAt = (story: StoryData): number => {
+  return story.expiresAt || story.createdAt + 24 * 60 * 60 * 1000;
 };
 
 const buildProfileStats = (profile: UserProfile, cars: CarData[]) => {
@@ -482,8 +519,8 @@ export const dbService = {
 
   async getUserCars(uid: string): Promise<CarData[]> {
     if (isFirebaseConfigured) {
-      const carsRef = collection(db, 'profiles', uid, 'cars');
-      const q = query(carsRef, orderBy('createdAt', 'desc'));
+      const postsRef = collection(db, 'posts');
+      const q = query(postsRef, where('ownerUid', '==', uid), orderBy('createdAt', 'desc'));
       const snapshots = await getDocs(q);
       return snapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as CarData));
     } else {
@@ -503,23 +540,23 @@ export const dbService = {
   async getAllCars(): Promise<(CarData & { owner: UserProfile })[]> {
     const dbState = getMockDB();
     if (isFirebaseConfigured) {
-      // In Firestore, we query all cars. A subcollection query / "collectionGroup" is cleanest.
       const carsList: (CarData & { owner: UserProfile })[] = [];
-      const profilesSnapshot = await getDocs(collection(db, 'profiles'));
+      const postsSnapshot = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
       
-      for (const profileDoc of profilesSnapshot.docs) {
-        const owner = profileDoc.data() as UserProfile;
-        const carsRef = collection(db, 'profiles', owner.uid, 'cars');
-        const carsSnap = await getDocs(carsRef);
-        carsSnap.docs.forEach(carDoc => {
-          carsList.push({
-            ...(carDoc.data() as CarData),
-            id: carDoc.id,
-            owner
-          });
-        });
+      for (const postDoc of postsSnapshot.docs) {
+        const car = { id: postDoc.id, ...postDoc.data() } as CarData;
+        const ownerUid = getCarOwnerUid(car);
+        if (ownerUid) {
+          const owner = await this.getUserProfile(ownerUid);
+          if (owner) {
+            carsList.push({
+              ...car,
+              owner
+            });
+          }
+        }
       }
-      return carsList.sort((a, b) => b.createdAt - a.createdAt);
+      return carsList;
     } else {
       return dbState.cars.map(car => {
         // Find owner
@@ -535,15 +572,20 @@ export const dbService = {
 
   async getUserStories(uid: string): Promise<StoryData[]> {
     if (isFirebaseConfigured) {
-      const storiesRef = collection(db, 'profiles', uid, 'stories');
-      const q = query(storiesRef, orderBy('createdAt', 'desc'));
+      const storiesRef = collection(db, 'stories');
+      const q = query(
+        storiesRef,
+        where('userId', '==', uid),
+        where('expiresAt', '>', Date.now()),
+        orderBy('expiresAt', 'asc')
+      );
       const snapshots = await getDocs(q);
       return snapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as StoryData));
     } else {
       const dbState = getMockDB();
       return dbState.stories
-        .filter((story) => story.ownerUid === uid)
-        .sort((a, b) => b.createdAt - a.createdAt);
+        .filter((story) => getStoryOwnerUid(story) === uid && isActiveStory(story))
+        .sort((a, b) => getStoryExpiresAt(a) - getStoryExpiresAt(b));
     }
   },
 
@@ -551,29 +593,100 @@ export const dbService = {
     const dbState = getMockDB();
     if (isFirebaseConfigured) {
       const storiesList: (StoryData & { owner: UserProfile })[] = [];
-      const profilesSnapshot = await getDocs(collection(db, 'profiles'));
+      const storiesSnap = await getDocs(query(
+        collection(db, 'stories'),
+        where('expiresAt', '>', Date.now()),
+        orderBy('expiresAt', 'asc')
+      ));
 
-      for (const profileDoc of profilesSnapshot.docs) {
-        const owner = profileDoc.data() as UserProfile;
-        const storiesRef = collection(db, 'profiles', owner.uid, 'stories');
-        const storiesSnap = await getDocs(storiesRef);
-        storiesSnap.docs.forEach(storyDoc => {
-          storiesList.push({
-            ...(storyDoc.data() as StoryData),
-            id: storyDoc.id,
-            owner
-          });
-        });
+      for (const storyDoc of storiesSnap.docs) {
+        const story = { id: storyDoc.id, ...storyDoc.data() } as StoryData;
+        const ownerUid = getStoryOwnerUid(story);
+        if (ownerUid) {
+          const owner = await this.getUserProfile(ownerUid);
+          if (owner) {
+            storiesList.push({
+              ...story,
+              owner
+            });
+          }
+        }
       }
-      return storiesList.sort((a, b) => b.createdAt - a.createdAt);
+      return storiesList;
     } else {
-      return dbState.stories.map(story => {
-        const owner = dbState.users.find(u => u.uid === story.ownerUid) || SEED_PROFILES[0];
-        return {
-          ...story,
-          owner
-        };
-      }).sort((a, b) => b.createdAt - a.createdAt);
+      return dbState.stories
+        .filter(isActiveStory)
+        .map(story => {
+          const ownerUid = getStoryOwnerUid(story);
+          const owner = dbState.users.find(u => u.uid === ownerUid) || SEED_PROFILES[0];
+          return {
+            ...story,
+            owner
+          };
+        })
+        .sort((a, b) => getStoryExpiresAt(a) - getStoryExpiresAt(b));
+    }
+  },
+
+  async uploadStory(
+    uid: string,
+    storyData: { caption?: string; mediaType: 'image' | 'video' },
+    mediaFile: File
+  ): Promise<StoryData> {
+    const storyId = 'story_' + Date.now();
+    const createdAt = Date.now();
+    const expiresAt = createdAt + 24 * 60 * 60 * 1000;
+    let mediaUrl = '';
+    const profile = await this.getUserProfile(uid);
+    const username = profile?.username || 'driver';
+    const userAvatar = profile?.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400';
+
+    if (isFirebaseConfigured) {
+      const storageRef = ref(storage, `stories/${uid}/${storyId}_${mediaFile.name}`);
+      const snapshot = await uploadBytes(storageRef, mediaFile);
+      mediaUrl = await getDownloadURL(snapshot.ref);
+
+      const fullStoryData: StoryData = {
+        id: storyId,
+        userId: uid,
+        username,
+        userAvatar,
+        caption: storyData.caption || '',
+        mediaUrl,
+        mediaType: storyData.mediaType,
+        createdAt,
+        expiresAt,
+        viewedBy: [],
+        ownerUid: uid,
+      };
+
+      await setDoc(doc(db, 'stories', storyId), fullStoryData);
+      return fullStoryData;
+    } else {
+      mediaUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(mediaFile);
+      });
+
+      const fullStoryData: StoryData = {
+        id: storyId,
+        userId: uid,
+        username,
+        userAvatar,
+        caption: storyData.caption || '',
+        mediaUrl,
+        mediaType: storyData.mediaType,
+        createdAt,
+        expiresAt,
+        viewedBy: [],
+        ownerUid: uid,
+      };
+
+      const dbState = getMockDB();
+      dbState.stories.unshift(fullStoryData);
+      saveMockDB(dbState);
+      return fullStoryData;
     }
   },
 
@@ -606,7 +719,7 @@ export const dbService = {
     }
   },
 
-  async uploadCar(
+  async uploadPost(
     uid: string, 
     carData: Omit<CarData, 'id' | 'createdAt' | 'upvotes' | 'photos' | 'calculatedScore'>,
     photoFiles: File[]
@@ -614,12 +727,14 @@ export const dbService = {
     const calculatedScore = calculateCarGR({ ...carData, upvotes: 0, photos: [] });
     const carId = 'car_' + Date.now();
     const photoUrls: string[] = [];
+    const profile = await this.getUserProfile(uid);
+    const username = profile?.username || 'driver';
 
     // Process images
     if (isFirebaseConfigured) {
       for (let i = 0; i < photoFiles.length; i++) {
         const file = photoFiles[i];
-        const storageRef = ref(storage, `profiles/${uid}/cars/${carId}_${i}`);
+        const storageRef = ref(storage, `posts/${uid}/${carId}_${i}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
         const downloadUrl = await getDownloadURL(snapshot.ref);
         photoUrls.push(downloadUrl);
@@ -633,22 +748,36 @@ export const dbService = {
       const fullCarData: CarData = {
         id: carId,
         ...carData,
+        userId: uid,
+        username,
+        mediaUrl: photoUrls[0],
+        mediaType: 'image',
+        caption: carData.description,
+        hashtags: ['pistonlife', 'garagebuilt', carData.make.toLowerCase()],
+        carDetails: {
+          make: carData.make,
+          model: carData.model,
+          year: carData.year,
+        },
+        likes: [],
+        commentsCount: 0,
         photos: photoUrls,
         upvotes: 0,
         createdAt: Date.now(),
-        calculatedScore
+        calculatedScore,
+        ownerUid: uid
       };
 
-      // Write to Firestore under subcollection
-      await setDoc(doc(db, 'profiles', uid, 'cars', carId), fullCarData);
+      // Write permanent feed content to the posts collection only.
+      await setDoc(doc(db, 'posts', carId), fullCarData);
 
       // Re-calculate user total score & badges
       const userDocRef = doc(db, 'profiles', uid);
       const userSnap = await getDoc(userDocRef);
       if (userSnap.exists()) {
         const currentProfile = userSnap.data() as UserProfile;
-        const userCarsRef = collection(db, 'profiles', uid, 'cars');
-        const carsSnap = await getDocs(userCarsRef);
+        const userPostsRef = collection(db, 'posts');
+        const carsSnap = await getDocs(query(userPostsRef, where('ownerUid', '==', uid)));
         const cars = carsSnap.docs.map(doc => doc.data() as CarData);
         
         const newTotalGR = cars.reduce((acc, car) => acc + (car.calculatedScore || 0), 0);
@@ -687,6 +816,19 @@ export const dbService = {
       const fullCarData: CarData = {
         id: carId,
         ...carData,
+        userId: uid,
+        username,
+        mediaUrl: photoUrls[0],
+        mediaType: 'image',
+        caption: carData.description,
+        hashtags: ['pistonlife', 'garagebuilt', carData.make.toLowerCase()],
+        carDetails: {
+          make: carData.make,
+          model: carData.model,
+          year: carData.year,
+        },
+        likes: [],
+        commentsCount: 0,
         photos: photoUrls,
         upvotes: 0,
         createdAt: Date.now(),
@@ -709,14 +851,22 @@ export const dbService = {
     }
   },
 
+  async uploadCar(
+    uid: string,
+    carData: Omit<CarData, 'id' | 'createdAt' | 'upvotes' | 'photos' | 'calculatedScore'>,
+    photoFiles: File[]
+  ): Promise<CarData> {
+    return this.uploadPost(uid, carData, photoFiles);
+  },
+
   async deleteCar(uid: string, carId: string): Promise<void> {
     if (isFirebaseConfigured) {
-      await deleteDoc(doc(db, 'profiles', uid, 'cars', carId));
+      await deleteDoc(doc(db, 'posts', carId));
 
       const userDocRef = doc(db, 'profiles', uid);
       const userSnap = await getDoc(userDocRef);
       if (userSnap.exists()) {
-        const userCarsSnap = await getDocs(collection(db, 'profiles', uid, 'cars'));
+        const userCarsSnap = await getDocs(query(collection(db, 'posts'), where('ownerUid', '==', uid)));
         const cars = userCarsSnap.docs.map(doc => doc.data() as CarData);
         const stats = buildProfileStats(userSnap.data() as UserProfile, cars);
 
@@ -749,42 +899,35 @@ export const dbService = {
 
   async upvoteCar(carId: string, userId: string): Promise<void> {
     if (isFirebaseConfigured) {
-      // Firestore transactions/updates can increment upvotes
-      // To prevent multi-upvoting, we can keep an array of upvoting userIds on the car doc
-      // Alternatively, let's find the car across all profiles and update it.
-      // Since it's a subcollection, we need the owner's UID. Let's find owner and update.
-      const profilesSnap = await getDocs(collection(db, 'profiles'));
-      for (const profileDoc of profilesSnap.docs) {
-        const ownerUid = profileDoc.id;
-        const carDocRef = doc(db, 'profiles', ownerUid, 'cars', carId);
-        const carSnap = await getDoc(carDocRef);
-        if (carSnap.exists()) {
-          const car = carSnap.data() as CarData;
-          // Upvote logic
-          const upvotes = (car.upvotes || 0) + 1;
-          const updatedScore = calculateCarGR({
-            ...car,
-            upvotes
-          });
-          
-          await updateDoc(carDocRef, {
-            upvotes,
-            calculatedScore: updatedScore
-          });
+      const postDocRef = doc(db, 'posts', carId);
+      const postSnap = await getDoc(postDocRef);
+      if (postSnap.exists()) {
+        const car = { id: postSnap.id, ...postSnap.data() } as CarData;
+        const ownerUid = getCarOwnerUid(car);
+        const upvotes = (car.upvotes || 0) + 1;
+        const updatedScore = calculateCarGR({
+          ...car,
+          upvotes
+        });
 
-          // Update owner's total reputation
-          const userCarsSnap = await getDocs(collection(db, 'profiles', ownerUid, 'cars'));
+        await updateDoc(postDocRef, {
+          upvotes,
+          calculatedScore: updatedScore
+        });
+
+        if (ownerUid) {
+          const ownerProfile = await this.getUserProfile(ownerUid);
+          const userCarsSnap = await getDocs(query(collection(db, 'posts'), where('ownerUid', '==', ownerUid)));
           const cars = userCarsSnap.docs.map(doc => doc.data() as CarData);
           const newTotalGR = cars.reduce((acc, c) => acc + (c.calculatedScore || 0), 0);
           const rankInfo = getGarageRank(newTotalGR);
-          const newBadges = evaluateBadges(profileDoc.data() as UserProfile, cars);
+          const newBadges = ownerProfile ? evaluateBadges(ownerProfile, cars) : [];
 
           await updateDoc(doc(db, 'profiles', ownerUid), {
             garageReputation: newTotalGR,
             rank: rankInfo.current.title,
             badges: newBadges
           });
-          break;
         }
       }
     } else {

@@ -99,7 +99,7 @@ export default function UploadCar() {
       setLoading(true);
       setError('');
       
-      await dbService.uploadCar(
+      await dbService.uploadPost(
         currentUser.uid,
         {
           make: make.trim(),
