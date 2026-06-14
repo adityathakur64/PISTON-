@@ -13,13 +13,14 @@ import {
   getDoc, 
   setDoc, 
   updateDoc, 
+  deleteDoc,
   collection, 
   getDocs, 
   query, 
   orderBy
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import type { CarData, UserProfile } from './reputationService';
+import type { CarData, StoryData, UserProfile } from './reputationService';
 import { calculateCarGR, getGarageRank, evaluateBadges } from './reputationService';
 
 // Firebase configuration structure
@@ -201,19 +202,92 @@ const SEED_CARS: CarData[] = [
   }
 ];
 
+const SEED_STORIES: StoryData[] = [
+  {
+    id: 'seed_story_1_1',
+    caption: 'Morning warmup before the canyon run.',
+    mediaUrl: 'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&q=80&w=800',
+    createdAt: Date.now() - 2 * 60 * 60 * 1000,
+    ownerUid: 'seed_user_1'
+  },
+  {
+    id: 'seed_story_2_1',
+    caption: 'Dialing in boost after the latest tune.',
+    mediaUrl: 'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&q=80&w=800',
+    createdAt: Date.now() - 4 * 60 * 60 * 1000,
+    ownerUid: 'seed_user_2'
+  },
+  {
+    id: 'seed_story_3_1',
+    caption: 'Fresh parts day in the garage.',
+    mediaUrl: 'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&q=80&w=800',
+    createdAt: Date.now() - 7 * 60 * 60 * 1000,
+    ownerUid: 'seed_user_3'
+  },
+  {
+    id: 'seed_story_4_1',
+    caption: 'Track prep checklist is finally done.',
+    mediaUrl: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=800',
+    createdAt: Date.now() - 11 * 60 * 60 * 1000,
+    ownerUid: 'seed_user_4'
+  }
+];
+
 // Helper to load/save mock database state from LocalStorage
 const getMockDB = () => {
-  const defaultDB = { users: SEED_PROFILES, cars: SEED_CARS, upvotes: {} as Record<string, string[]> };
+  const defaultDB = {
+    users: SEED_PROFILES,
+    cars: SEED_CARS,
+    stories: SEED_STORIES,
+    upvotes: {} as Record<string, string[]>
+  };
   const data = localStorage.getItem('piston_mock_db');
   if (!data) {
     localStorage.setItem('piston_mock_db', JSON.stringify(defaultDB));
     return defaultDB;
   }
-  return JSON.parse(data) as typeof defaultDB;
+  const parsed = JSON.parse(data) as typeof defaultDB;
+  if (!parsed.stories) {
+    parsed.stories = SEED_STORIES;
+    localStorage.setItem('piston_mock_db', JSON.stringify(parsed));
+  }
+  return parsed;
 };
 
 const saveMockDB = (state: ReturnType<typeof getMockDB>) => {
   localStorage.setItem('piston_mock_db', JSON.stringify(state));
+};
+
+const seedCarOwners: Record<string, string> = {
+  seed_car_1_1: 'seed_user_1',
+  seed_car_2_1: 'seed_user_2',
+  seed_car_3_1: 'seed_user_3',
+  seed_car_4_1: 'seed_user_4',
+  seed_car_5_1: 'seed_user_5',
+};
+
+const getCarOwnerUid = (car: CarData): string | undefined => {
+  return car.ownerUid || seedCarOwners[car.id];
+};
+
+const getMockUserCars = (cars: CarData[], uid: string): CarData[] => {
+  return cars.filter((car) => getCarOwnerUid(car) === uid);
+};
+
+const buildProfileStats = (profile: UserProfile, cars: CarData[]) => {
+  const newTotalGR = cars.reduce((acc, car) => acc + (car.calculatedScore || 0), 0);
+  const rankInfo = getGarageRank(newTotalGR);
+  const updatedProfile = {
+    ...profile,
+    garageReputation: newTotalGR,
+    rank: rankInfo.current.title,
+  };
+
+  return {
+    garageReputation: newTotalGR,
+    rank: rankInfo.current.title,
+    badges: evaluateBadges(updatedProfile, cars),
+  };
 };
 
 // Stateful mock auth listener & storage
@@ -422,17 +496,7 @@ export const dbService = {
       // Let's adapt our Mock database schema to store an `ownerUid` or map them.
       // Let's assume car objects in LocalStorage store `ownerUid` attribute. Let's write the mock to support it.
       // Let's get all cars and filter.
-      const userCars = dbState.cars.filter((car: any) => {
-        if (car.ownerUid === uid) return true;
-        // fallback mapping for seeded cars
-        if (uid === 'seed_user_1' && car.id === 'seed_car_1_1') return true;
-        if (uid === 'seed_user_2' && car.id === 'seed_car_2_1') return true;
-        if (uid === 'seed_user_3' && car.id === 'seed_car_3_1') return true;
-        if (uid === 'seed_user_4' && car.id === 'seed_car_4_1') return true;
-        if (uid === 'seed_user_5' && car.id === 'seed_car_5_1') return true;
-        return false;
-      });
-      return userCars;
+      return getMockUserCars(dbState.cars, uid);
     }
   },
 
@@ -459,17 +523,54 @@ export const dbService = {
     } else {
       return dbState.cars.map(car => {
         // Find owner
-        let ownerUid = (car as any).ownerUid;
-        if (!ownerUid) {
-          if (car.id === 'seed_car_1_1') ownerUid = 'seed_user_1';
-          if (car.id === 'seed_car_2_1') ownerUid = 'seed_user_2';
-          if (car.id === 'seed_car_3_1') ownerUid = 'seed_user_3';
-          if (car.id === 'seed_car_4_1') ownerUid = 'seed_user_4';
-          if (car.id === 'seed_car_5_1') ownerUid = 'seed_user_5';
-        }
+        const ownerUid = getCarOwnerUid(car);
         const owner = dbState.users.find(u => u.uid === ownerUid) || SEED_PROFILES[0];
         return {
           ...car,
+          owner
+        };
+      }).sort((a, b) => b.createdAt - a.createdAt);
+    }
+  },
+
+  async getUserStories(uid: string): Promise<StoryData[]> {
+    if (isFirebaseConfigured) {
+      const storiesRef = collection(db, 'profiles', uid, 'stories');
+      const q = query(storiesRef, orderBy('createdAt', 'desc'));
+      const snapshots = await getDocs(q);
+      return snapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as StoryData));
+    } else {
+      const dbState = getMockDB();
+      return dbState.stories
+        .filter((story) => story.ownerUid === uid)
+        .sort((a, b) => b.createdAt - a.createdAt);
+    }
+  },
+
+  async getAllStories(): Promise<(StoryData & { owner: UserProfile })[]> {
+    const dbState = getMockDB();
+    if (isFirebaseConfigured) {
+      const storiesList: (StoryData & { owner: UserProfile })[] = [];
+      const profilesSnapshot = await getDocs(collection(db, 'profiles'));
+
+      for (const profileDoc of profilesSnapshot.docs) {
+        const owner = profileDoc.data() as UserProfile;
+        const storiesRef = collection(db, 'profiles', owner.uid, 'stories');
+        const storiesSnap = await getDocs(storiesRef);
+        storiesSnap.docs.forEach(storyDoc => {
+          storiesList.push({
+            ...(storyDoc.data() as StoryData),
+            id: storyDoc.id,
+            owner
+          });
+        });
+      }
+      return storiesList.sort((a, b) => b.createdAt - a.createdAt);
+    } else {
+      return dbState.stories.map(story => {
+        const owner = dbState.users.find(u => u.uid === story.ownerUid) || SEED_PROFILES[0];
+        return {
+          ...story,
           owner
         };
       }).sort((a, b) => b.createdAt - a.createdAt);
@@ -591,7 +692,7 @@ export const dbService = {
         createdAt: Date.now(),
         calculatedScore,
         ownerUid: uid
-      } as any;
+      };
 
       const dbState = getMockDB();
       dbState.cars.unshift(fullCarData);
@@ -599,18 +700,50 @@ export const dbService = {
       // Update User profile stats
       const userIndex = dbState.users.findIndex(u => u.uid === uid);
       if (userIndex !== -1) {
-        // Find all cars of this user
-        const allUserCars = dbState.cars.filter((c: any) => c.ownerUid === uid || (uid === 'seed_user_1' && c.id === 'seed_car_1_1') || (uid === 'seed_user_2' && c.id === 'seed_car_2_1'));
-        const newTotalGR = allUserCars.reduce((acc, c) => acc + (c.calculatedScore || 0), 0);
-        const rankInfo = getGarageRank(newTotalGR);
-        
-        dbState.users[userIndex].garageReputation = newTotalGR;
-        dbState.users[userIndex].rank = rankInfo.current.title;
-        dbState.users[userIndex].badges = evaluateBadges(dbState.users[userIndex], allUserCars);
+        const stats = buildProfileStats(dbState.users[userIndex], getMockUserCars(dbState.cars, uid));
+        dbState.users[userIndex] = { ...dbState.users[userIndex], ...stats };
       }
 
       saveMockDB(dbState);
       return fullCarData;
+    }
+  },
+
+  async deleteCar(uid: string, carId: string): Promise<void> {
+    if (isFirebaseConfigured) {
+      await deleteDoc(doc(db, 'profiles', uid, 'cars', carId));
+
+      const userDocRef = doc(db, 'profiles', uid);
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        const userCarsSnap = await getDocs(collection(db, 'profiles', uid, 'cars'));
+        const cars = userCarsSnap.docs.map(doc => doc.data() as CarData);
+        const stats = buildProfileStats(userSnap.data() as UserProfile, cars);
+
+        await updateDoc(userDocRef, stats);
+      }
+    } else {
+      const dbState = getMockDB();
+      const car = dbState.cars.find((item) => item.id === carId);
+      if (!car) return;
+
+      const ownerUid = getCarOwnerUid(car);
+      if (ownerUid !== uid) {
+        throw new Error('You can only delete posts from your own garage.');
+      }
+
+      dbState.cars = dbState.cars.filter((item) => item.id !== carId);
+      if (dbState.upvotes) {
+        delete dbState.upvotes[carId];
+      }
+
+      const userIndex = dbState.users.findIndex((user) => user.uid === uid);
+      if (userIndex !== -1) {
+        const stats = buildProfileStats(dbState.users[userIndex], getMockUserCars(dbState.cars, uid));
+        dbState.users[userIndex] = { ...dbState.users[userIndex], ...stats };
+      }
+
+      saveMockDB(dbState);
     }
   },
 
@@ -697,24 +830,12 @@ export const dbService = {
         car.calculatedScore = updatedScore;
 
         // Recalculate owner profile
-        let ownerUid = (car as any).ownerUid;
-        if (!ownerUid) {
-          if (car.id === 'seed_car_1_1') ownerUid = 'seed_user_1';
-          if (car.id === 'seed_car_2_1') ownerUid = 'seed_user_2';
-          if (car.id === 'seed_car_3_1') ownerUid = 'seed_user_3';
-          if (car.id === 'seed_car_4_1') ownerUid = 'seed_user_4';
-          if (car.id === 'seed_car_5_1') ownerUid = 'seed_user_5';
-        }
+        const ownerUid = getCarOwnerUid(car);
 
-        const userIndex = dbState.users.findIndex(u => u.uid === ownerUid);
-        if (userIndex !== -1) {
-          const allUserCars = dbState.cars.filter((c: any) => c.ownerUid === ownerUid || (ownerUid === 'seed_user_1' && c.id === 'seed_car_1_1') || (ownerUid === 'seed_user_2' && c.id === 'seed_car_2_1'));
-          const newTotalGR = allUserCars.reduce((acc, c) => acc + (c.calculatedScore || 0), 0);
-          const rankInfo = getGarageRank(newTotalGR);
-          
-          dbState.users[userIndex].garageReputation = newTotalGR;
-          dbState.users[userIndex].rank = rankInfo.current.title;
-          dbState.users[userIndex].badges = evaluateBadges(dbState.users[userIndex], allUserCars);
+        const userIndex = ownerUid ? dbState.users.findIndex(u => u.uid === ownerUid) : -1;
+        if (ownerUid && userIndex !== -1) {
+          const stats = buildProfileStats(dbState.users[userIndex], getMockUserCars(dbState.cars, ownerUid));
+          dbState.users[userIndex] = { ...dbState.users[userIndex], ...stats };
         }
 
         saveMockDB(dbState);

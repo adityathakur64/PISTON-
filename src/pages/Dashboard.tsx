@@ -1,35 +1,50 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   Award,
   Bookmark,
+  ChevronLeft,
+  ChevronRight,
   Crown,
   Gauge,
   Heart,
   MessageCircle,
-  MoreHorizontal,
   Plus,
   Send,
   ShieldCheck,
   Star,
   TrendingUp,
+  User,
+  Video,
+  X,
 } from 'lucide-react';
 import { authService, dbService } from '../services/firebase';
-import type { CarData, UserProfile } from '../services/reputationService';
+import type { CarData, StoryData, UserProfile } from '../services/reputationService';
 import { BADGES, getGarageRank } from '../services/reputationService';
 import BadgeEmblem from '../components/BadgeEmblem';
 
+type FeedPost = CarData & { owner: UserProfile };
+type FeedStory = StoryData & { owner: UserProfile };
+
 export default function Dashboard() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [cars, setCars] = useState<CarData[]>([]);
+  const [feedPosts, setFeedPosts] = useState<FeedPost[]>([]);
+  const [feedStories, setFeedStories] = useState<FeedStory[]>([]);
+  const [selectedStoryOwnerUid, setSelectedStoryOwnerUid] = useState<string | null>(null);
+  const [selectedStoryIndex, setSelectedStoryIndex] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const loadDashboardData = async (uid: string) => {
     try {
-      const userProfile = await dbService.getUserProfile(uid);
-      const userCars = await dbService.getUserCars(uid);
+      const [userProfile, cars, stories] = await Promise.all([
+        dbService.getUserProfile(uid),
+        dbService.getAllCars(),
+        dbService.getAllStories(),
+      ]);
       setProfile(userProfile);
-      setCars(userCars);
+      setFeedPosts(cars);
+      setFeedStories(stories);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
     } finally {
@@ -54,7 +69,7 @@ export default function Dashboard() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-zinc-800 border-t-brand-orange"></div>
         <span className="mt-3 font-display text-sm uppercase tracking-widest text-zinc-500">
-          Syncing Garage Stats
+          Loading Platform Feed
         </span>
       </div>
     );
@@ -63,8 +78,14 @@ export default function Dashboard() {
   if (!profile) return null;
 
   const rankInfo = getGarageRank(profile.garageReputation);
-  const featuredCar = cars[0];
-  const storyCars = cars.length > 0 ? cars : [];
+  const storyCreators = feedStories.filter(
+    (story, index, stories) => stories.findIndex((item) => item.owner.uid === story.owner.uid) === index
+  );
+  const selectedStoryPosts = selectedStoryOwnerUid
+    ? feedStories.filter((story) => story.owner.uid === selectedStoryOwnerUid)
+    : [];
+  const selectedStory = selectedStoryPosts[selectedStoryIndex] || selectedStoryPosts[0];
+  const reelPosts = feedPosts.slice(0, 5);
   const trendingTags = [
     ['#pistonlife', '12.4K posts'],
     ['#jdm', '8.7K posts'],
@@ -73,112 +94,187 @@ export default function Dashboard() {
     ['#builtnotbought', '3.2K posts'],
   ];
 
+  const openStory = (ownerUid: string) => {
+    setSelectedStoryOwnerUid(ownerUid);
+    setSelectedStoryIndex(0);
+  };
+
+  const closeStory = () => {
+    setSelectedStoryOwnerUid(null);
+    setSelectedStoryIndex(0);
+  };
+
+  const showPreviousStory = () => {
+    setSelectedStoryIndex((index) => Math.max(0, index - 1));
+  };
+
+  const showNextStory = () => {
+    setSelectedStoryIndex((index) => Math.min(selectedStoryPosts.length - 1, index + 1));
+  };
+
   return (
     <div className="grid gap-6 animate-fadeIn xl:grid-cols-[minmax(0,1fr)_320px]">
       <section className="min-w-0 space-y-5">
         <div className="rounded-xl border hairline bg-black/40 p-4">
           <div className="flex gap-5 overflow-x-auto pb-1">
-            <Link to="/upload" className="w-20 shrink-0 text-center">
+            <button type="button" className="w-20 shrink-0 text-center" title="Create story">
               <div className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-dashed border-brand-orange/70 bg-black text-brand-orange transition hover:bg-brand-orange/10">
                 <Plus size={22} />
               </div>
               <div className="mt-2 truncate text-[11px] font-semibold text-zinc-400">Your Story</div>
-            </Link>
+            </button>
 
-            {storyCars.slice(0, 8).map((car) => (
-              <div key={car.id} className="w-20 shrink-0 text-center">
+            {storyCreators.slice(0, 10).map((story) => (
+              <button
+                key={story.owner.uid}
+                type="button"
+                onClick={() => openStory(story.owner.uid)}
+                className="w-20 shrink-0 text-center"
+              >
                 <div className="mx-auto h-16 w-16 rounded-full border-2 border-brand-orange p-0.5 shadow-[0_0_20px_rgba(232,93,4,0.12)]">
                   <img
-                    src={car.photos[0]}
-                    alt={`${car.make} ${car.model}`}
+                    src={story.owner.profileImage}
+                    alt={story.owner.displayName}
                     className="h-full w-full rounded-full object-cover"
                   />
                 </div>
                 <div className="mt-2 truncate text-[11px] font-semibold text-zinc-400">
-                  {car.model}
+                  {story.owner.username}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
 
-        {featuredCar ? (
-          <article className="glass-panel overflow-hidden rounded-xl">
-            <header className="flex items-center justify-between border-b hairline px-4 py-3">
-              <div className="flex items-center gap-3">
-                <img
-                  src={profile.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400'}
-                  alt={profile.displayName}
-                  className="h-10 w-10 rounded-full border border-brand-orange/45 object-cover"
-                />
-                <div>
-                  <div className="text-sm font-bold text-white">{profile.username}</div>
-                  <div className="text-[11px] text-zinc-500">
-                    {featuredCar.year} {featuredCar.make} {featuredCar.model}
+        {selectedStory && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/88 p-4 backdrop-blur-md">
+            <div className="relative flex h-[92vh] max-h-[760px] min-h-[420px] w-full max-w-md flex-col overflow-hidden rounded-xl border hairline bg-zinc-950 shadow-2xl">
+              <div className="absolute left-0 right-0 top-0 z-20 flex gap-1 p-3">
+                {selectedStoryPosts.map((story, index) => (
+                  <div key={`story-progress-${story.id}`} className="h-1 flex-1 overflow-hidden rounded-full bg-white/20">
+                    <div
+                      className={`h-full rounded-full ${
+                        index <= selectedStoryIndex ? 'bg-brand-orange' : 'bg-transparent'
+                      }`}
+                    />
                   </div>
-                </div>
+                ))}
               </div>
-              <button className="rounded-lg p-2 text-zinc-500 hover:bg-bg-input hover:text-white" title="More">
-                <MoreHorizontal size={18} />
-              </button>
-            </header>
 
-            <div className="relative aspect-[4/3] bg-black sm:aspect-[16/10]">
-              <img
-                src={featuredCar.photos[0]}
-                alt={`${featuredCar.year} ${featuredCar.make} ${featuredCar.model}`}
-                className="h-full w-full object-cover"
-              />
-              <div className="absolute left-4 top-4 rounded-full bg-black/72 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-brand-orange backdrop-blur">
-                {featuredCar.rarity}
-              </div>
-              {featuredCar.isVerified && (
-                <div className="absolute right-4 top-4 rounded-full bg-brand-orange p-2 text-black" title="Verified Ride">
-                  <ShieldCheck size={16} />
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 text-zinc-200">
-                  <button className="transition hover:text-brand-orange" title="Like">
-                    <Heart size={21} />
-                  </button>
-                  <button className="transition hover:text-brand-orange" title="Comment">
-                    <MessageCircle size={21} />
-                  </button>
-                  <button className="transition hover:text-brand-orange" title="Share">
-                    <Send size={21} />
-                  </button>
-                </div>
-                <button className="text-zinc-300 transition hover:text-brand-orange" title="Save">
-                  <Bookmark size={21} />
+              <div className="absolute left-0 right-0 top-5 z-20 flex items-center justify-between px-4 py-3">
+                <Link to={`/profile/${selectedStory.owner.uid}`} onClick={closeStory} className="flex min-w-0 items-center gap-3">
+                  <img
+                    src={selectedStory.owner.profileImage}
+                    alt={selectedStory.owner.displayName}
+                    className="h-10 w-10 rounded-full border border-brand-orange/60 object-cover"
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-white">@{selectedStory.owner.username}</div>
+                    <div className="truncate text-[11px] text-zinc-300">
+                      Story
+                    </div>
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={closeStory}
+                  className="grid h-9 w-9 place-items-center rounded-lg bg-black/55 text-zinc-200 transition hover:bg-white/10"
+                  title="Close story"
+                >
+                  <X size={18} />
                 </button>
               </div>
 
-              <div className="text-xs font-bold text-zinc-300">
-                {featuredCar.upvotes.toLocaleString()} likes
+              <img
+                src={selectedStory.mediaUrl}
+                alt={selectedStory.caption}
+                className="h-full w-full object-cover"
+              />
+
+              <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/72 to-transparent p-5 pt-20">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-brand-orange px-3 py-1 text-[10px] font-black uppercase tracking-widest text-black">
+                    Story
+                  </span>
+                </div>
+                <h2 className="font-display text-3xl leading-none tracking-wide text-white">
+                  @{selectedStory.owner.username}
+                </h2>
+                <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-300">
+                  {selectedStory.caption || 'Creator uploaded a story.'}
+                </p>
+                <div className="mt-4 text-xs font-bold text-zinc-300">
+                  {new Date(selectedStory.createdAt).toLocaleDateString()}
+                </div>
               </div>
-              <p className="text-sm leading-relaxed text-zinc-300">
-                <span className="font-bold text-white">{profile.username}</span>{' '}
-                {featuredCar.description || 'Built for night runs, clean lines, and real garage reputation.'}
-              </p>
-              <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
-                <span className="text-brand-orange">#pistonlife</span>
-                <span className="text-brand-orange">#garagebuilt</span>
-                <span className="text-brand-orange">#{featuredCar.make.toLowerCase()}</span>
-              </div>
+
+              <button
+                type="button"
+                onClick={showPreviousStory}
+                disabled={selectedStoryIndex === 0}
+                className="absolute left-2 top-1/2 z-20 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white transition hover:bg-black/70 disabled:opacity-25"
+                title="Previous story"
+              >
+                <ChevronLeft size={22} />
+              </button>
+              <button
+                type="button"
+                onClick={showNextStory}
+                disabled={selectedStoryIndex >= selectedStoryPosts.length - 1}
+                className="absolute right-2 top-1/2 z-20 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white transition hover:bg-black/70 disabled:opacity-25"
+                title="Next story"
+              >
+                <ChevronRight size={22} />
+              </button>
+
+              <Link
+                to={`/profile/${selectedStory.owner.uid}`}
+                onClick={closeStory}
+                className="absolute bottom-5 right-5 z-20 grid h-10 w-10 place-items-center rounded-lg border border-white/15 bg-black/55 text-zinc-200 transition hover:border-brand-orange/50 hover:text-brand-orange"
+                title="Open creator profile"
+              >
+                <User size={18} />
+              </Link>
             </div>
-          </article>
-        ) : (
+          </div>,
+          document.body
+        )}
+
+        {reelPosts.length > 0 && (
+          <div className="glass-panel rounded-xl p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Video size={17} className="text-brand-orange" />
+                <h2 className="text-xs font-black uppercase tracking-widest text-zinc-400">Creator Reels</h2>
+              </div>
+              <span className="text-[10px] font-semibold text-zinc-600">Featured builds</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {reelPosts.map((post) => (
+                <div key={`reel-${post.id}`} className="relative aspect-[9/14] overflow-hidden rounded-xl bg-black">
+                  <img
+                    src={post.photos[0]}
+                    alt={`${post.make} ${post.model}`}
+                    className="h-full w-full object-cover"
+                  />
+                  <Link to={`/profile/${post.owner.uid}`} className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/60 to-transparent p-2">
+                    <div className="truncate text-[10px] font-bold text-white">@{post.owner.username}</div>
+                    <div className="truncate text-[9px] text-zinc-400">{post.model}</div>
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {feedPosts.length === 0 ? (
           <div className="glass-panel rounded-xl p-10 text-center">
             <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border hairline bg-bg-input text-brand-orange">
               <Gauge size={24} />
             </div>
-            <h2 className="mt-4 font-display text-3xl tracking-wide text-white">Start Your Garage Feed</h2>
+            <h2 className="mt-4 font-display text-3xl tracking-wide text-white">No Feed Posts Yet</h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-zinc-500">
-              Upload your first build to turn your garage into a PISTON status profile.
+              Upload the first build and start the platform feed.
             </p>
             <Link
               to="/upload"
@@ -187,35 +283,84 @@ export default function Dashboard() {
               Upload Car
             </Link>
           </div>
-        )}
-
-        {cars.length > 1 && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {cars.slice(1).map((car) => (
-              <div key={car.id} className="glass-panel group overflow-hidden rounded-xl">
-                <div className="relative h-40 bg-black">
-                  <img
-                    src={car.photos[0]}
-                    alt={`${car.year} ${car.make} ${car.model}`}
-                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute bottom-3 left-3 rounded bg-black/72 px-2 py-1 text-[10px] font-black text-brand-orange backdrop-blur">
-                    +{car.calculatedScore?.toLocaleString()} GR
+        ) : (
+          <div className="space-y-5">
+            {feedPosts.map((post) => (
+              <article key={post.id} className="glass-panel overflow-hidden rounded-xl">
+                <header className="flex items-center justify-between border-b hairline px-4 py-3">
+                  <Link to={`/profile/${post.owner.uid}`} className="flex min-w-0 items-center gap-3">
+                    <img
+                      src={post.owner.profileImage}
+                      alt={post.owner.displayName}
+                      className="h-10 w-10 rounded-full border border-brand-orange/45 object-cover"
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-white">{post.owner.username}</div>
+                      <div className="truncate text-[11px] text-zinc-500">
+                        {post.year} {post.make} {post.model}
+                      </div>
+                    </div>
+                  </Link>
+                  <div className="rounded-full border border-brand-orange/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand-orange">
+                    {post.owner.rank}
                   </div>
+                </header>
+
+                <div className="relative aspect-[4/3] bg-black sm:aspect-[16/10]">
+                  <img
+                    src={post.photos[0]}
+                    alt={`${post.year} ${post.make} ${post.model}`}
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute left-4 top-4 rounded-full bg-black/72 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-brand-orange backdrop-blur">
+                    {post.rarity}
+                  </div>
+                  {post.isVerified && (
+                    <div className="absolute right-4 top-4 rounded-full bg-brand-orange p-2 text-black" title="Verified Ride">
+                      <ShieldCheck size={16} />
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-2 p-4">
-                  <h3 className="font-display text-2xl leading-none tracking-wide text-white">
-                    {car.year} {car.make} {car.model}
-                  </h3>
-                  <div className="flex items-center justify-between text-xs text-zinc-500">
-                    <span className="uppercase">{car.rarity}</span>
-                    <span className="flex items-center gap-1 text-zinc-300">
+
+                <div className="space-y-3 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 text-zinc-200">
+                      <button className="transition hover:text-brand-orange" title="Like">
+                        <Heart size={21} />
+                      </button>
+                      <button className="transition hover:text-brand-orange" title="Comment">
+                        <MessageCircle size={21} />
+                      </button>
+                      <button className="transition hover:text-brand-orange" title="Share">
+                        <Send size={21} />
+                      </button>
+                    </div>
+                    <button className="text-zinc-300 transition hover:text-brand-orange" title="Save">
+                      <Bookmark size={21} />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-bold text-zinc-300">
+                    <span>{post.upvotes.toLocaleString()} likes</span>
+                    <span className="text-brand-orange">+{post.calculatedScore?.toLocaleString()} GR</span>
+                    <span className="flex items-center gap-1 text-zinc-400">
                       <Star size={12} className="fill-brand-orange stroke-brand-orange" />
-                      {car.buildQuality}/10
+                      {post.buildQuality}/10 build
                     </span>
                   </div>
+                  <p className="text-sm leading-relaxed text-zinc-300">
+                    <Link to={`/profile/${post.owner.uid}`} className="font-bold text-white hover:text-brand-orange">
+                      {post.owner.username}
+                    </Link>{' '}
+                    {post.description || 'Built for night runs, clean lines, and real garage reputation.'}
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
+                    <span className="text-brand-orange">#pistonlife</span>
+                    <span className="text-brand-orange">#garagebuilt</span>
+                    <span className="text-brand-orange">#{post.make.toLowerCase()}</span>
+                  </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}
@@ -226,7 +371,7 @@ export default function Dashboard() {
           <div className="flex items-start justify-between">
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                Garage Reputation
+                Your Garage Reputation
               </div>
               <div className="mt-2 font-display text-5xl leading-none tracking-wide text-brand-orange">
                 {profile.garageReputation.toLocaleString()}
@@ -234,7 +379,7 @@ export default function Dashboard() {
               </div>
               <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-brand-orange">
                 <TrendingUp size={13} />
-                <span>1,250 this week</span>
+                <span>{feedPosts.length.toLocaleString()} live feed posts</span>
               </div>
             </div>
             <svg viewBox="0 0 120 70" className="h-20 w-28 text-brand-orange">
@@ -254,7 +399,7 @@ export default function Dashboard() {
         <div className="glass-panel rounded-xl p-5">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Rank</div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Your Rank</div>
               <div className="mt-2 text-2xl font-bold text-white">{rankInfo.current.title}</div>
             </div>
             <div className="grid h-14 w-14 place-items-center rounded-xl border border-brand-orange/45 bg-brand-orange/10 text-brand-orange">
@@ -269,7 +414,7 @@ export default function Dashboard() {
         <div className="glass-panel rounded-xl p-5">
           <div className="mb-4 flex items-center gap-2">
             <Award size={17} className="text-brand-orange" />
-            <h2 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Badges</h2>
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Your Badges</h2>
           </div>
           <div className="grid grid-cols-5 gap-2">
             {BADGES.map((badge) => {

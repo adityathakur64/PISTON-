@@ -45,6 +45,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/profile/:uid"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
         </Routes>

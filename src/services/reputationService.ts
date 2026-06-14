@@ -13,6 +13,15 @@ export interface CarData {
   photos: string[];
   createdAt: number;
   calculatedScore?: number;
+  ownerUid?: string;
+}
+
+export interface StoryData {
+  id: string;
+  caption: string;
+  mediaUrl: string;
+  createdAt: number;
+  ownerUid?: string;
 }
 
 export interface UserProfile {

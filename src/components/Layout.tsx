@@ -77,16 +77,16 @@ export default function Layout({ children }: LayoutProps) {
   const authenticated = Boolean(currentUser && profile);
 
   return (
-    <div className="min-h-screen bg-bg-dark bg-grid-pattern text-zinc-100 pb-20 md:pb-0">
+    <div className={`min-h-screen bg-bg-dark bg-grid-pattern text-zinc-100 pb-20 md:pb-0 ${authenticated ? 'md:pl-64' : ''}`}>
       {authenticated && (
-        <aside className="hidden md:flex fixed inset-y-0 left-0 z-40 w-64 flex-col border-r hairline bg-black/90 backdrop-blur-xl">
-          <div className="px-7 pt-7 pb-6 border-b hairline">
+        <aside className="hidden md:flex fixed inset-y-0 left-0 z-40 w-64 min-h-0 flex-col border-r hairline bg-black/90 backdrop-blur-xl">
+          <div className="shrink-0 px-7 pt-7 pb-6 border-b hairline">
             <Link to="/" className="block">
               <PistonLogo size="md" />
             </Link>
           </div>
 
-          <nav className="flex-1 space-y-1 px-4 py-5">
+          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-4 py-5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = item.path ? location.pathname === item.path : false;
@@ -126,7 +126,7 @@ export default function Layout({ children }: LayoutProps) {
             </Link>
           </nav>
 
-          <div className="m-4 rounded-xl border hairline bg-bg-card p-4">
+          <div className="m-4 shrink-0 rounded-xl border hairline bg-bg-card p-4">
             <Link to="/profile" className="flex items-center gap-3">
               <img
                 src={profile?.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400'}
@@ -212,7 +212,7 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </header>
 
-      <main className={`mx-auto w-full p-4 md:p-7 ${authenticated ? 'max-w-[1360px] md:ml-64 md:pt-24' : 'max-w-7xl'}`}>
+      <main className={`mx-auto w-full min-w-0 p-4 md:p-7 ${authenticated ? 'max-w-[1360px] md:pt-24' : 'max-w-7xl'}`}>
         {children}
       </main>
 

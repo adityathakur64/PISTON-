@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Award, ShieldCheck, Edit3, Save, Star, Calendar } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useParams } from 'react-router-dom';
+import { Award, ShieldCheck, Edit3, Save, Star, Calendar, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { authService, dbService } from '../services/firebase';
-import type { UserProfile, CarData } from '../services/reputationService';
+import type { UserProfile, CarData, StoryData } from '../services/reputationService';
 import { BADGES } from '../services/reputationService';
 import BadgeEmblem from '../components/BadgeEmblem';
 import RankBadge from '../components/RankBadge';
 
 export default function Profile() {
+  const { uid: routeUid } = useParams<{ uid: string }>();
+  const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [cars, setCars] = useState<CarData[]>([]);
+  const [stories, setStories] = useState<StoryData[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Edit Form State
@@ -18,13 +23,23 @@ export default function Profile() {
   const [editProfileImage, setEditProfileImage] = useState('');
   const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState('');
+  const [deletingCarId, setDeletingCarId] = useState<string | null>(null);
+  const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
 
   const loadProfile = async (uid: string) => {
     try {
-      const userProfile = await dbService.getUserProfile(uid);
-      const userCars = await dbService.getUserCars(uid);
+      setLoading(true);
+      const [userProfile, userCars, userStories] = await Promise.all([
+        dbService.getUserProfile(uid),
+        dbService.getUserCars(uid),
+        dbService.getUserStories(uid),
+      ]);
       setProfile(userProfile);
       setCars(userCars);
+      setStories(userStories);
+      setIsEditing(false);
+      setError('');
+      setSelectedStoryIndex(null);
       
       if (userProfile) {
         setEditDisplayName(userProfile.displayName);
@@ -41,19 +56,22 @@ export default function Profile() {
   useEffect(() => {
     const unsubscribe = authService.subscribeToAuthChanges((user) => {
       if (user) {
-        loadProfile(user.uid);
+        setCurrentUserUid(user.uid);
+        loadProfile(routeUid || user.uid);
       } else {
+        setCurrentUserUid(null);
         setLoading(false);
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [routeUid]);
 
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
+    if (profile.uid !== currentUserUid) return;
     if (!editDisplayName.trim()) {
       return setError('Display name cannot be empty.');
     }
@@ -82,6 +100,25 @@ export default function Profile() {
     }
   };
 
+  const handleDeleteCar = async (carId: string) => {
+    if (!profile) return;
+    if (profile.uid !== currentUserUid) return;
+
+    const confirmed = window.confirm('Delete this car post from your garage? This cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      setError('');
+      setDeletingCarId(carId);
+      await dbService.deleteCar(profile.uid, carId);
+      await loadProfile(profile.uid);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete this post.');
+    } finally {
+      setDeletingCarId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -95,13 +132,32 @@ export default function Profile() {
 
   if (!profile) return null;
 
+  const isOwnProfile = profile.uid === currentUserUid;
+  const selectedStory = selectedStoryIndex !== null ? stories[selectedStoryIndex] : null;
+
+  const openStory = (index: number) => {
+    setSelectedStoryIndex(index);
+  };
+
+  const closeStory = () => {
+    setSelectedStoryIndex(null);
+  };
+
+  const showPreviousStory = () => {
+    setSelectedStoryIndex((index) => (index === null ? null : Math.max(0, index - 1)));
+  };
+
+  const showNextStory = () => {
+    setSelectedStoryIndex((index) => (index === null ? null : Math.min(stories.length - 1, index + 1)));
+  };
+
   return (
     <div className="space-y-8 max-w-4xl mx-auto animate-fadeIn">
       {/* Profile Card */}
       <div className="glass-panel rounded-xl p-6 relative overflow-hidden">
         <div className="absolute inset-x-0 top-0 h-px accent-rail"></div>
 
-        {isEditing ? (
+        {isEditing && isOwnProfile ? (
           // EDIT PROFILE FORM
           <form onSubmit={handleSave} className="space-y-4 relative z-10">
             <h2 className="text-sm font-display font-black text-white uppercase tracking-wider border-b hairline pb-2">
@@ -187,13 +243,15 @@ export default function Profile() {
                   <h1 className="text-xl md:text-2xl font-display font-black text-white m-0 uppercase tracking-tight">
                     {profile.displayName}
                   </h1>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="p-1 text-zinc-500 hover:text-brand-orange bg-zinc-950 hover:bg-zinc-900 rounded-lg border border-zinc-800/80 transition-all"
-                    title="Edit Profile"
-                  >
-                    <Edit3 size={14} />
-                  </button>
+                  {isOwnProfile && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="p-1 text-zinc-500 hover:text-brand-orange bg-zinc-950 hover:bg-zinc-900 rounded-lg border border-zinc-800/80 transition-all"
+                      title="Edit Profile"
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-zinc-500">@{profile.username}</p>
                 <div className="pt-1">
@@ -233,6 +291,132 @@ export default function Profile() {
           </div>
         )}
       </div>
+
+      {/* Stories */}
+      {stories.length > 0 && (
+        <div className="glass-panel rounded-xl p-5">
+          <div className="mb-4 flex items-center justify-between border-b hairline pb-3">
+            <div>
+              <h2 className="text-xs font-display font-black text-white uppercase tracking-wider">
+                Stories
+              </h2>
+              <p className="mt-1 text-[10px] font-semibold text-zinc-500">
+                Tap a story to preview this creator's latest updates.
+              </p>
+            </div>
+            <span className="rounded-full border border-brand-orange/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand-orange">
+              {stories.length} live
+            </span>
+          </div>
+
+          <div className="flex gap-4 overflow-x-auto pb-1">
+            {stories.map((story, index) => (
+              <button
+                key={`profile-story-${story.id}`}
+                type="button"
+                onClick={() => openStory(index)}
+                className="w-24 shrink-0 text-left"
+              >
+                <div className="relative mx-auto h-20 w-20 rounded-full border-2 border-brand-orange p-0.5 shadow-[0_0_20px_rgba(232,93,4,0.12)]">
+                  <img
+                    src={story.mediaUrl}
+                    alt={story.caption}
+                    className="h-full w-full rounded-full object-cover"
+                  />
+                </div>
+                <div className="mt-2 truncate text-center text-[11px] font-semibold text-zinc-400">
+                  {story.caption}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedStory && selectedStoryIndex !== null && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/88 p-4 backdrop-blur-md">
+          <div className="relative flex h-[92vh] max-h-[760px] min-h-[420px] w-full max-w-md flex-col overflow-hidden rounded-xl border hairline bg-zinc-950 shadow-2xl">
+            <div className="absolute left-0 right-0 top-0 z-20 flex gap-1 p-3">
+              {stories.map((story, index) => (
+                <div key={`profile-story-progress-${story.id}`} className="h-1 flex-1 overflow-hidden rounded-full bg-white/20">
+                  <div
+                    className={`h-full rounded-full ${
+                      index <= selectedStoryIndex ? 'bg-brand-orange' : 'bg-transparent'
+                    }`}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="absolute left-0 right-0 top-5 z-20 flex items-center justify-between px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <img
+                  src={profile.profileImage}
+                  alt={profile.displayName}
+                  className="h-10 w-10 rounded-full border border-brand-orange/60 object-cover"
+                />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold text-white">@{profile.username}</div>
+                  <div className="truncate text-[11px] text-zinc-300">
+                    Story
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeStory}
+                className="grid h-9 w-9 place-items-center rounded-lg bg-black/55 text-zinc-200 transition hover:bg-white/10"
+                title="Close story"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <img
+              src={selectedStory.mediaUrl}
+              alt={selectedStory.caption}
+              className="h-full w-full object-cover"
+            />
+
+            <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/72 to-transparent p-5 pt-20">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-brand-orange px-3 py-1 text-[10px] font-black uppercase tracking-widest text-black">
+                  Story
+                </span>
+              </div>
+              <h2 className="font-display text-3xl leading-none tracking-wide text-white">
+                @{profile.username}
+              </h2>
+              <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-300">
+                {selectedStory.caption || 'Creator uploaded a story.'}
+              </p>
+              <div className="mt-4 text-xs font-bold text-zinc-300">
+                {new Date(selectedStory.createdAt).toLocaleDateString()}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={showPreviousStory}
+              disabled={selectedStoryIndex === 0}
+              className="absolute left-2 top-1/2 z-20 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white transition hover:bg-black/70 disabled:opacity-25"
+              title="Previous story"
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <button
+              type="button"
+              onClick={showNextStory}
+              disabled={selectedStoryIndex >= stories.length - 1}
+              className="absolute right-2 top-1/2 z-20 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white transition hover:bg-black/70 disabled:opacity-25"
+              title="Next story"
+            >
+              <ChevronRight size={22} />
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Badges Panel */}
       <div className="glass-panel rounded-xl p-5 space-y-4">
@@ -278,6 +462,12 @@ export default function Profile() {
           Vehicle Lineup
         </h2>
 
+        {error && !isEditing && (
+          <div className="rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
         {cars.length === 0 ? (
           <p className="text-xs text-zinc-500 italic">No cars in lineup yet.</p>
         ) : (
@@ -298,6 +488,16 @@ export default function Profile() {
                     <div className="absolute top-1.5 right-1.5 bg-brand-orange text-black p-0.5 rounded-full border border-black">
                       <ShieldCheck size={12} className="stroke-[2.5]" />
                     </div>
+                  )}
+                  {isOwnProfile && (
+                    <button
+                      onClick={() => handleDeleteCar(car.id)}
+                      disabled={deletingCarId === car.id}
+                      className="absolute bottom-1.5 right-1.5 grid h-8 w-8 place-items-center rounded-lg bg-black/75 text-zinc-300 backdrop-blur transition hover:bg-red-950/85 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      title="Delete post"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   )}
                 </div>
 
