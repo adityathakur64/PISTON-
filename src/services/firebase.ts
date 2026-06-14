@@ -1,6 +1,4 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
-  getAuth, 
   signInWithEmailAndPassword as fbSignIn, 
   createUserWithEmailAndPassword as fbCreateUser, 
   signOut as fbSignOut, 
@@ -8,7 +6,6 @@ import {
   updateProfile as fbUpdateProfile
 } from 'firebase/auth';
 import { 
-  getFirestore, 
   doc, 
   getDoc, 
   setDoc, 
@@ -20,44 +17,10 @@ import {
   orderBy,
   where
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage, isFirebaseConfigured } from '../firebase.js';
 import type { CarData, StoryData, UserProfile } from './reputationService';
 import { calculateCarGR, getGarageRank, evaluateBadges } from './reputationService';
-
-// Firebase configuration structure
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
-};
-
-// Check if Firebase configs are provided
-const isFirebaseConfigured = !!(
-  firebaseConfig.apiKey && 
-  firebaseConfig.authDomain && 
-  firebaseConfig.projectId
-);
-
-let auth: any = null;
-let db: any = null;
-let storage: any = null;
-
-if (isFirebaseConfigured) {
-  try {
-    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-    auth = getAuth(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
-    console.log('Firebase initialized successfully.');
-  } catch (error) {
-    console.error('Firebase initialization failed, falling back to Mock Mode:', error);
-  }
-} else {
-  console.log('Firebase credentials not found. Running in stateful MOCK mode (LocalStorage).');
-}
 
 // ----------------------------------------------------------------------------
 // SEED DATA FOR MOCK MODE
@@ -292,7 +255,7 @@ const seedCarOwners: Record<string, string> = {
 };
 
 const getCarOwnerUid = (car: CarData): string | undefined => {
-  return car.ownerUid || seedCarOwners[car.id];
+  return car.userId || car.ownerUid || seedCarOwners[car.id];
 };
 
 const getMockUserCars = (cars: CarData[], uid: string): CarData[] => {
@@ -424,15 +387,15 @@ export const authService = {
         uid: credential.user.uid,
         username: cleanUsername,
         displayName: displayName,
-        bio: 'Just joined the garage.',
-        profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400',
+        bio: '',
+        profileImage: '',
         garageReputation: 0,
         rank: 'Street Rookie',
         badges: [],
         createdAt: Date.now()
       };
       
-      await setDoc(doc(db, 'profiles', credential.user.uid), userProfile);
+      await setDoc(doc(db, 'users', credential.user.uid), userProfile);
       return credential.user;
     } else {
       const dbState = getMockDB();
@@ -488,7 +451,7 @@ export const authService = {
 export const dbService = {
   async getUserProfile(uid: string): Promise<UserProfile | null> {
     if (isFirebaseConfigured) {
-      const userDoc = await getDoc(doc(db, 'profiles', uid));
+      const userDoc = await getDoc(doc(db, 'users', uid));
       return userDoc.exists() ? (userDoc.data() as UserProfile) : null;
     } else {
       const dbState = getMockDB();
@@ -499,7 +462,7 @@ export const dbService = {
 
   async updateUserProfile(uid: string, updateData: Partial<UserProfile>): Promise<void> {
     if (isFirebaseConfigured) {
-      await updateDoc(doc(db, 'profiles', uid), updateData);
+      await updateDoc(doc(db, 'users', uid), updateData);
     } else {
       const dbState = getMockDB();
       const index = dbState.users.findIndex(u => u.uid === uid);
@@ -519,8 +482,8 @@ export const dbService = {
 
   async getUserCars(uid: string): Promise<CarData[]> {
     if (isFirebaseConfigured) {
-      const postsRef = collection(db, 'posts');
-      const q = query(postsRef, where('ownerUid', '==', uid), orderBy('createdAt', 'desc'));
+      const carsRef = collection(db, 'cars');
+      const q = query(carsRef, where('userId', '==', uid), orderBy('createdAt', 'desc'));
       const snapshots = await getDocs(q);
       return snapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as CarData));
     } else {
@@ -541,10 +504,10 @@ export const dbService = {
     const dbState = getMockDB();
     if (isFirebaseConfigured) {
       const carsList: (CarData & { owner: UserProfile })[] = [];
-      const postsSnapshot = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
+      const carsSnapshot = await getDocs(query(collection(db, 'cars'), orderBy('createdAt', 'desc')));
       
-      for (const postDoc of postsSnapshot.docs) {
-        const car = { id: postDoc.id, ...postDoc.data() } as CarData;
+      for (const carDoc of carsSnapshot.docs) {
+        const car = { id: carDoc.id, ...carDoc.data() } as CarData;
         const ownerUid = getCarOwnerUid(car);
         if (ownerUid) {
           const owner = await this.getUserProfile(ownerUid);
@@ -692,7 +655,7 @@ export const dbService = {
 
   async getLeaderboard(): Promise<UserProfile[]> {
     if (isFirebaseConfigured) {
-      const profilesRef = collection(db, 'profiles');
+      const profilesRef = collection(db, 'users');
       // Order by reputation score descending
       const q = query(profilesRef, orderBy('garageReputation', 'desc'));
       const snapshots = await getDocs(q);
@@ -734,7 +697,7 @@ export const dbService = {
     if (isFirebaseConfigured) {
       for (let i = 0; i < photoFiles.length; i++) {
         const file = photoFiles[i];
-        const storageRef = ref(storage, `posts/${uid}/${carId}_${i}_${file.name}`);
+        const storageRef = ref(storage, `cars/${uid}/${carId}_${i}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
         const downloadUrl = await getDownloadURL(snapshot.ref);
         photoUrls.push(downloadUrl);
@@ -751,6 +714,7 @@ export const dbService = {
         userId: uid,
         username,
         mediaUrl: photoUrls[0],
+        imageUrl: photoUrls[0],
         mediaType: 'image',
         caption: carData.description,
         hashtags: ['pistonlife', 'garagebuilt', carData.make.toLowerCase()],
@@ -765,19 +729,19 @@ export const dbService = {
         upvotes: 0,
         createdAt: Date.now(),
         calculatedScore,
+        garageScore: calculatedScore,
         ownerUid: uid
       };
 
-      // Write permanent feed content to the posts collection only.
-      await setDoc(doc(db, 'posts', carId), fullCarData);
+      await setDoc(doc(db, 'cars', carId), fullCarData);
 
       // Re-calculate user total score & badges
-      const userDocRef = doc(db, 'profiles', uid);
+      const userDocRef = doc(db, 'users', uid);
       const userSnap = await getDoc(userDocRef);
       if (userSnap.exists()) {
         const currentProfile = userSnap.data() as UserProfile;
-        const userPostsRef = collection(db, 'posts');
-        const carsSnap = await getDocs(query(userPostsRef, where('ownerUid', '==', uid)));
+        const userCarsRef = collection(db, 'cars');
+        const carsSnap = await getDocs(query(userCarsRef, where('userId', '==', uid)));
         const cars = carsSnap.docs.map(doc => doc.data() as CarData);
         
         const newTotalGR = cars.reduce((acc, car) => acc + (car.calculatedScore || 0), 0);
@@ -819,6 +783,7 @@ export const dbService = {
         userId: uid,
         username,
         mediaUrl: photoUrls[0],
+        imageUrl: photoUrls[0],
         mediaType: 'image',
         caption: carData.description,
         hashtags: ['pistonlife', 'garagebuilt', carData.make.toLowerCase()],
@@ -833,6 +798,7 @@ export const dbService = {
         upvotes: 0,
         createdAt: Date.now(),
         calculatedScore,
+        garageScore: calculatedScore,
         ownerUid: uid
       };
 
@@ -861,12 +827,12 @@ export const dbService = {
 
   async deleteCar(uid: string, carId: string): Promise<void> {
     if (isFirebaseConfigured) {
-      await deleteDoc(doc(db, 'posts', carId));
+      await deleteDoc(doc(db, 'cars', carId));
 
-      const userDocRef = doc(db, 'profiles', uid);
+      const userDocRef = doc(db, 'users', uid);
       const userSnap = await getDoc(userDocRef);
       if (userSnap.exists()) {
-        const userCarsSnap = await getDocs(query(collection(db, 'posts'), where('ownerUid', '==', uid)));
+        const userCarsSnap = await getDocs(query(collection(db, 'cars'), where('userId', '==', uid)));
         const cars = userCarsSnap.docs.map(doc => doc.data() as CarData);
         const stats = buildProfileStats(userSnap.data() as UserProfile, cars);
 
@@ -899,7 +865,7 @@ export const dbService = {
 
   async upvoteCar(carId: string, userId: string): Promise<void> {
     if (isFirebaseConfigured) {
-      const postDocRef = doc(db, 'posts', carId);
+      const postDocRef = doc(db, 'cars', carId);
       const postSnap = await getDoc(postDocRef);
       if (postSnap.exists()) {
         const car = { id: postSnap.id, ...postSnap.data() } as CarData;
@@ -917,13 +883,13 @@ export const dbService = {
 
         if (ownerUid) {
           const ownerProfile = await this.getUserProfile(ownerUid);
-          const userCarsSnap = await getDocs(query(collection(db, 'posts'), where('ownerUid', '==', ownerUid)));
+          const userCarsSnap = await getDocs(query(collection(db, 'cars'), where('userId', '==', ownerUid)));
           const cars = userCarsSnap.docs.map(doc => doc.data() as CarData);
           const newTotalGR = cars.reduce((acc, c) => acc + (c.calculatedScore || 0), 0);
           const rankInfo = getGarageRank(newTotalGR);
           const newBadges = ownerProfile ? evaluateBadges(ownerProfile, cars) : [];
 
-          await updateDoc(doc(db, 'profiles', ownerUid), {
+          await updateDoc(doc(db, 'users', ownerUid), {
             garageReputation: newTotalGR,
             rank: rankInfo.current.title,
             badges: newBadges

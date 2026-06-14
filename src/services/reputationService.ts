@@ -11,8 +11,10 @@ export interface CarData {
   isVerified: boolean;
   upvotes: number;
   photos: string[];
+  imageUrl?: string;
   createdAt: number;
   calculatedScore?: number;
+  garageScore?: number;
   ownerUid?: string;
   userId?: string;
   username?: string;
