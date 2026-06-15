@@ -17,10 +17,61 @@ import {
   orderBy,
   where
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage, isFirebaseConfigured } from '../firebase.js';
+import { auth, db, isFirebaseConfigured } from '../firebase.js';
 import type { CarData, StoryData, UserProfile } from './reputationService';
 import { calculateCarGR, getGarageRank, evaluateBadges } from './reputationService';
+
+const FIREBASE_UPLOAD_TIMEOUT_MS = 45000;
+const MOCK_FILE_READ_TIMEOUT_MS = 15000;
+const EMPTY_MEDIA_URL = '';
+const STORAGE_UPLOADS_ENABLED = false;
+
+const withTimeout = async <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
+const readFileAsDataUrl = async (file: File): Promise<string> => {
+  return withTimeout(
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}. Try a different image.`));
+      reader.readAsDataURL(file);
+    }),
+    MOCK_FILE_READ_TIMEOUT_MS,
+    `Reading ${file.name} took too long. Try a smaller image.`
+  );
+};
+
+const assertFirebaseServices = () => {
+  if (!db) {
+    throw new Error('Firebase is missing Firestore configuration. Check your .env values and restart the dev server.');
+  }
+};
+
+const getUploadBuildPhotoUrls = async (_uid: string, _carId: string, _photoFiles: File[]): Promise<string[]> => {
+  if (!STORAGE_UPLOADS_ENABLED) {
+    return [];
+  }
+
+  // Firebase Storage integration will return download URLs here when Storage is enabled.
+  return [];
+};
 
 // ----------------------------------------------------------------------------
 // SEED DATA FOR MOCK MODE
@@ -350,7 +401,7 @@ export const authService = {
           username: prefix || 'driver',
           displayName: prefix ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : 'New Driver',
           bio: 'Garage built, track ready.',
-          profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400',
+          profileImage: '',
           garageReputation: 0,
           rank: 'Street Rookie',
           badges: [],
@@ -411,7 +462,7 @@ export const authService = {
         username: cleanUsername,
         displayName: displayName,
         bio: 'Just joined the garage.',
-        profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400',
+        profileImage: '',
         garageReputation: 0,
         rank: 'Street Rookie',
         badges: [],
@@ -483,9 +534,11 @@ export const dbService = {
   async getUserCars(uid: string): Promise<CarData[]> {
     if (isFirebaseConfigured) {
       const carsRef = collection(db, 'cars');
-      const q = query(carsRef, where('userId', '==', uid), orderBy('createdAt', 'desc'));
+      const q = query(carsRef, where('userId', '==', uid));
       const snapshots = await getDocs(q);
-      return snapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as CarData));
+      return snapshots.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as CarData))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     } else {
       const dbState = getMockDB();
       // Look up cars from seed/user array in mock db
@@ -536,14 +589,12 @@ export const dbService = {
   async getUserStories(uid: string): Promise<StoryData[]> {
     if (isFirebaseConfigured) {
       const storiesRef = collection(db, 'stories');
-      const q = query(
-        storiesRef,
-        where('userId', '==', uid),
-        where('expiresAt', '>', Date.now()),
-        orderBy('expiresAt', 'asc')
-      );
+      const q = query(storiesRef, where('userId', '==', uid));
       const snapshots = await getDocs(q);
-      return snapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as StoryData));
+      return snapshots.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as StoryData))
+        .filter(isActiveStory)
+        .sort((a, b) => getStoryExpiresAt(a) - getStoryExpiresAt(b));
     } else {
       const dbState = getMockDB();
       return dbState.stories
@@ -602,12 +653,11 @@ export const dbService = {
     let mediaUrl = '';
     const profile = await this.getUserProfile(uid);
     const username = profile?.username || 'driver';
-    const userAvatar = profile?.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400';
+    const userAvatar = profile?.profileImage || '';
 
     if (isFirebaseConfigured) {
-      const storageRef = ref(storage, `stories/${uid}/${storyId}_${mediaFile.name}`);
-      const snapshot = await uploadBytes(storageRef, mediaFile);
-      mediaUrl = await getDownloadURL(snapshot.ref);
+      assertFirebaseServices();
+      mediaUrl = EMPTY_MEDIA_URL;
 
       const fullStoryData: StoryData = {
         id: storyId,
@@ -623,14 +673,14 @@ export const dbService = {
         ownerUid: uid,
       };
 
-      await setDoc(doc(db, 'stories', storyId), fullStoryData);
+      await withTimeout(
+        setDoc(doc(db, 'stories', storyId), fullStoryData),
+        FIREBASE_UPLOAD_TIMEOUT_MS,
+        'Saving the story took too long. Check Firestore rules and try again.'
+      );
       return fullStoryData;
     } else {
-      mediaUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(mediaFile);
-      });
+      mediaUrl = await readFileAsDataUrl(mediaFile);
 
       const fullStoryData: StoryData = {
         id: storyId,
@@ -689,32 +739,22 @@ export const dbService = {
   ): Promise<CarData> {
     const calculatedScore = calculateCarGR({ ...carData, upvotes: 0, photos: [] });
     const carId = 'car_' + Date.now();
-    const photoUrls: string[] = [];
     const profile = await this.getUserProfile(uid);
     const username = profile?.username || 'driver';
 
-    // Process images
-    if (isFirebaseConfigured) {
-      for (let i = 0; i < photoFiles.length; i++) {
-        const file = photoFiles[i];
-        const storageRef = ref(storage, `cars/${uid}/${carId}_${i}_${file.name}`);
-        const snapshot = await uploadBytes(storageRef, file);
-        const downloadUrl = await getDownloadURL(snapshot.ref);
-        photoUrls.push(downloadUrl);
-      }
+    const photoUrls = await getUploadBuildPhotoUrls(uid, carId, photoFiles);
+    const primaryImageUrl = photoUrls[0] || EMPTY_MEDIA_URL;
 
-      // Default photo if none uploaded
-      if (photoUrls.length === 0) {
-        photoUrls.push('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=800');
-      }
+    if (isFirebaseConfigured) {
+      assertFirebaseServices();
 
       const fullCarData: CarData = {
         id: carId,
         ...carData,
         userId: uid,
         username,
-        mediaUrl: photoUrls[0],
-        imageUrl: photoUrls[0],
+        mediaUrl: primaryImageUrl,
+        imageUrl: primaryImageUrl,
         mediaType: 'image',
         caption: carData.description,
         hashtags: ['pistonlife', 'garagebuilt', carData.make.toLowerCase()],
@@ -733,15 +773,27 @@ export const dbService = {
         ownerUid: uid
       };
 
-      await setDoc(doc(db, 'cars', carId), fullCarData);
+      await withTimeout(
+        setDoc(doc(db, 'cars', carId), fullCarData),
+        FIREBASE_UPLOAD_TIMEOUT_MS,
+        'Saving the car post took too long. Check Firestore rules and try again.'
+      );
 
       // Re-calculate user total score & badges
       const userDocRef = doc(db, 'users', uid);
-      const userSnap = await getDoc(userDocRef);
+      const userSnap = await withTimeout(
+        getDoc(userDocRef),
+        FIREBASE_UPLOAD_TIMEOUT_MS,
+        'Loading your profile took too long after upload. Refresh and check your garage.'
+      );
       if (userSnap.exists()) {
         const currentProfile = userSnap.data() as UserProfile;
         const userCarsRef = collection(db, 'cars');
-        const carsSnap = await getDocs(query(userCarsRef, where('userId', '==', uid)));
+        const carsSnap = await withTimeout(
+          getDocs(query(userCarsRef, where('userId', '==', uid))),
+          FIREBASE_UPLOAD_TIMEOUT_MS,
+          'Recalculating your garage score took too long. Refresh and check your garage.'
+        );
         const cars = carsSnap.docs.map(doc => doc.data() as CarData);
         
         const newTotalGR = cars.reduce((acc, car) => acc + (car.calculatedScore || 0), 0);
@@ -753,37 +805,26 @@ export const dbService = {
         };
         const newBadges = evaluateBadges(updatedProfile, cars);
         
-        await updateDoc(userDocRef, {
-          garageReputation: newTotalGR,
-          rank: rankInfo.current.title,
-          badges: newBadges
-        });
+        await withTimeout(
+          updateDoc(userDocRef, {
+            garageReputation: newTotalGR,
+            rank: rankInfo.current.title,
+            badges: newBadges
+          }),
+          FIREBASE_UPLOAD_TIMEOUT_MS,
+          'Updating your garage score took too long. Refresh and check your garage.'
+        );
       }
 
       return fullCarData;
     } else {
-      // Mock File Upload (Convert File to Base64 to persist in LocalStorage)
-      for (const file of photoFiles) {
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-        photoUrls.push(base64);
-      }
-
-      // Default mockup car photo from Unsplash if none provided
-      if (photoUrls.length === 0) {
-        photoUrls.push('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=800');
-      }
-
       const fullCarData: CarData = {
         id: carId,
         ...carData,
         userId: uid,
         username,
-        mediaUrl: photoUrls[0],
-        imageUrl: photoUrls[0],
+        mediaUrl: primaryImageUrl,
+        imageUrl: primaryImageUrl,
         mediaType: 'image',
         caption: carData.description,
         hashtags: ['pistonlife', 'garagebuilt', carData.make.toLowerCase()],

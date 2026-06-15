@@ -3,6 +3,7 @@ import { Crown, Trophy, MapPin } from 'lucide-react';
 import { authService, dbService } from '../services/firebase';
 import type { UserProfile, CarData } from '../services/reputationService';
 import RankBadge from '../components/RankBadge';
+import UserAvatar from '../components/UserAvatar';
 
 
 type CategoryFilter = 'all' | 'jdm' | 'euro' | 'muscle' | 'exotic';
@@ -168,10 +169,11 @@ export default function Leaderboard() {
                 <div className="w-full md:w-1/3 flex flex-col items-center order-2 md:order-1">
                   <div className="relative group">
                     <div className="absolute inset-0 bg-zinc-500/10 rounded-full transition-all"></div>
-                    <img
-                      src={podiumUsers[1].profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400'}
-                      alt={podiumUsers[1].displayName}
-                      className="w-20 h-20 rounded-full object-cover border-4 border-zinc-400 relative z-10"
+                    <UserAvatar
+                      src={podiumUsers[1].profileImage}
+                      name={podiumUsers[1].displayName}
+                      className="w-20 h-20 rounded-full object-cover border-4 border-zinc-400 relative z-10 text-sm"
+                      iconSize={22}
                     />
                     <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-zinc-400 text-black font-display font-extrabold text-[10px] px-2 py-0.5 rounded-full z-20">
                       2ND
@@ -199,10 +201,11 @@ export default function Leaderboard() {
                     {/* Crown Icon */}
                     <Crown className="absolute -top-7 left-1/2 -translate-x-1/2 text-brand-orange z-20" size={24} />
                     <div className="absolute inset-0 bg-brand-orange/12 rounded-full transition-all"></div>
-                    <img
-                      src={podiumUsers[0].profileImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=400'}
-                      alt={podiumUsers[0].displayName}
-                      className="w-24 h-24 rounded-full object-cover border-4 border-brand-orange relative z-10"
+                    <UserAvatar
+                      src={podiumUsers[0].profileImage}
+                      name={podiumUsers[0].displayName}
+                      className="w-24 h-24 rounded-full object-cover border-4 border-brand-orange relative z-10 text-base"
+                      iconSize={24}
                     />
                     <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 bg-brand-orange text-black font-display font-black text-xs px-3 py-0.5 rounded-full z-20 shadow">
                       CHAMP
@@ -228,10 +231,11 @@ export default function Leaderboard() {
                 <div className="w-full md:w-1/3 flex flex-col items-center order-3">
                   <div className="relative group">
                     <div className="absolute inset-0 bg-amber-800/10 rounded-full transition-all"></div>
-                    <img
-                      src={podiumUsers[2].profileImage || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=400'}
-                      alt={podiumUsers[2].displayName}
-                      className="w-[72px] h-[72px] rounded-full object-cover border-4 border-amber-700 relative z-10"
+                    <UserAvatar
+                      src={podiumUsers[2].profileImage}
+                      name={podiumUsers[2].displayName}
+                      className="w-[72px] h-[72px] rounded-full object-cover border-4 border-amber-700 relative z-10 text-xs"
+                      iconSize={20}
                     />
                     <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-amber-700 text-black font-display font-extrabold text-[10px] px-2 py-0.5 rounded-full z-20">
                       3RD
@@ -289,10 +293,11 @@ export default function Leaderboard() {
                           {/* Profile details */}
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-3">
-                              <img
-                                src={user.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400'}
-                                alt={user.displayName}
-                                className="w-9 h-9 rounded-full object-cover border border-zinc-800"
+                              <UserAvatar
+                                src={user.profileImage}
+                                name={user.displayName}
+                                className="w-9 h-9 rounded-full object-cover border border-zinc-800 text-[10px]"
+                                iconSize={15}
                               />
                               <div>
                                 <div className="font-display font-bold text-white uppercase text-xs leading-none">

@@ -23,6 +23,7 @@ import { authService, dbService } from '../services/firebase';
 import type { CarData, StoryData, UserProfile } from '../services/reputationService';
 import { BADGES, getGarageRank } from '../services/reputationService';
 import BadgeEmblem from '../components/BadgeEmblem';
+import UserAvatar from '../components/UserAvatar';
 
 type FeedPost = CarData & { owner: UserProfile };
 type FeedStory = StoryData & { owner: UserProfile };
@@ -132,10 +133,11 @@ export default function Dashboard() {
                 className="w-20 shrink-0 text-center"
               >
                 <div className="mx-auto h-16 w-16 rounded-full border-2 border-brand-orange p-0.5 shadow-[0_0_20px_rgba(232,93,4,0.12)]">
-                  <img
+                  <UserAvatar
                     src={story.owner.profileImage}
-                    alt={story.owner.displayName}
-                    className="h-full w-full rounded-full object-cover"
+                    name={story.owner.displayName}
+                    className="h-full w-full rounded-full object-cover text-xs"
+                    iconSize={16}
                   />
                 </div>
                 <div className="mt-2 truncate text-[11px] font-semibold text-zinc-400">
@@ -163,10 +165,11 @@ export default function Dashboard() {
 
               <div className="absolute left-0 right-0 top-5 z-20 flex items-center justify-between px-4 py-3">
                 <Link to={`/profile/${selectedStory.owner.uid}`} onClick={closeStory} className="flex min-w-0 items-center gap-3">
-                  <img
+                  <UserAvatar
                     src={selectedStory.owner.profileImage}
-                    alt={selectedStory.owner.displayName}
-                    className="h-10 w-10 rounded-full border border-brand-orange/60 object-cover"
+                    name={selectedStory.owner.displayName}
+                    className="h-10 w-10 rounded-full border border-brand-orange/60 object-cover text-xs"
+                    iconSize={16}
                   />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold text-white">@{selectedStory.owner.username}</div>
@@ -300,10 +303,11 @@ export default function Dashboard() {
               <article key={post.id} className="glass-panel overflow-hidden rounded-xl">
                 <header className="flex items-center justify-between border-b hairline px-4 py-3">
                   <Link to={`/profile/${post.owner.uid}`} className="flex min-w-0 items-center gap-3">
-                    <img
+                    <UserAvatar
                       src={post.owner.profileImage}
-                      alt={post.owner.displayName}
-                      className="h-10 w-10 rounded-full border border-brand-orange/45 object-cover"
+                      name={post.owner.displayName}
+                      className="h-10 w-10 rounded-full border border-brand-orange/45 object-cover text-xs"
+                      iconSize={16}
                     />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-white">{post.owner.username}</div>

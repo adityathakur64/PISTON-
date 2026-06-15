@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useParams } from 'react-router-dom';
-import { Award, ShieldCheck, Edit3, Save, Star, Calendar, Trash2, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { Award, ShieldCheck, Edit3, Save, Star, Calendar, Trash2, ChevronLeft, ChevronRight, Plus, X, ImagePlus } from 'lucide-react';
 import { authService, dbService } from '../services/firebase';
 import type { UserProfile, CarData, StoryData } from '../services/reputationService';
 import { BADGES } from '../services/reputationService';
 import BadgeEmblem from '../components/BadgeEmblem';
 import RankBadge from '../components/RankBadge';
+import UserAvatar from '../components/UserAvatar';
+
+const MAX_PROFILE_PHOTO_SIZE_MB = 0.75;
+const MAX_PROFILE_PHOTO_SIZE_BYTES = MAX_PROFILE_PHOTO_SIZE_MB * 1024 * 1024;
 
 export default function Profile() {
   const { uid: routeUid } = useParams<{ uid: string }>();
@@ -29,16 +33,20 @@ export default function Profile() {
   const loadProfile = async (uid: string) => {
     try {
       setLoading(true);
-      const [userProfile, userCars, userStories] = await Promise.all([
-        dbService.getUserProfile(uid),
+      const userProfile = await dbService.getUserProfile(uid);
+      const [carsResult, storiesResult] = await Promise.allSettled([
         dbService.getUserCars(uid),
         dbService.getUserStories(uid),
       ]);
+
+      const userCars = carsResult.status === 'fulfilled' ? carsResult.value : [];
+      const userStories = storiesResult.status === 'fulfilled' ? storiesResult.value : [];
+
       setProfile(userProfile);
       setCars(userCars);
       setStories(userStories);
       setIsEditing(false);
-      setError('');
+      setError(carsResult.status === 'rejected' ? 'Vehicle lineup could not be loaded. Refresh and try again.' : '');
       setSelectedStoryIndex(null);
       
       if (userProfile) {
@@ -48,6 +56,10 @@ export default function Profile() {
       }
     } catch (err) {
       console.error('Error loading profile:', err);
+      setProfile(null);
+      setCars([]);
+      setStories([]);
+      setError(err instanceof Error ? err.message : 'Failed to load profile.');
     } finally {
       setLoading(false);
     }
@@ -100,6 +112,29 @@ export default function Profile() {
     }
   };
 
+  const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      e.target.value = '';
+      return setError('Please choose an image file for your profile photo.');
+    }
+
+    if (file.size > MAX_PROFILE_PHOTO_SIZE_BYTES) {
+      e.target.value = '';
+      return setError(`Profile photo must be ${MAX_PROFILE_PHOTO_SIZE_MB}MB or smaller.`);
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditProfileImage(reader.result as string);
+      setError('');
+    };
+    reader.onerror = () => setError('Could not read this image. Try a different photo.');
+    reader.readAsDataURL(file);
+  };
+
   const handleDeleteCar = async (carId: string) => {
     if (!profile) return;
     if (profile.uid !== currentUserUid) return;
@@ -130,10 +165,24 @@ export default function Profile() {
     );
   }
 
-  if (!profile) return null;
+  if (!profile) {
+    return (
+      <div className="glass-panel mx-auto max-w-xl rounded-xl p-6 text-center">
+        <h1 className="font-display text-lg font-black uppercase tracking-wider text-white">
+          Profile unavailable
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          {error || 'This garage profile could not be found.'}
+        </p>
+      </div>
+    );
+  }
 
   const isOwnProfile = profile.uid === currentUserUid;
   const selectedStory = selectedStoryIndex !== null ? stories[selectedStoryIndex] : null;
+  const profileImage = profile.profileImage || '';
+  const badges = profile.badges || [];
+  const garageReputation = profile.garageReputation || 0;
 
   const openStory = (index: number) => {
     setSelectedStoryIndex(index);
@@ -170,7 +219,31 @@ export default function Profile() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4 items-end">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
+                  Profile Photo
+                </label>
+                <div className="flex items-center gap-3">
+                  <UserAvatar
+                    src={editProfileImage}
+                    name={editDisplayName}
+                    className="h-16 w-16 rounded-full border border-brand-orange/40 object-cover text-sm"
+                    iconSize={20}
+                  />
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border hairline px-3 py-2 text-xs font-display font-bold text-zinc-300 transition hover:border-brand-orange/45 hover:text-brand-orange">
+                    <ImagePlus size={15} />
+                    <span>UPLOAD</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePhotoChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
                   Display Name
@@ -184,18 +257,6 @@ export default function Profile() {
                 />
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-                  Avatar / Profile Photo URL
-                </label>
-                <input
-                  type="text"
-                  value={editProfileImage}
-                  onChange={(e) => setEditProfileImage(e.target.value)}
-                  placeholder="https://images.unsplash.com/photo-..."
-                  className="block w-full px-3 py-2 field-surface rounded-lg text-sm text-white focus:outline-none font-mono"
-                />
-              </div>
             </div>
 
             <div>
@@ -233,10 +294,11 @@ export default function Profile() {
           // READ PROFILE VIEW
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-5">
-              <img
-                src={profile.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400'}
-                alt={profile.displayName}
-                className="w-[72px] h-[72px] md:w-24 md:h-24 rounded-full object-cover border-2 border-zinc-800 shadow"
+              <UserAvatar
+                src={profileImage}
+                name={profile.displayName}
+                className="w-[72px] h-[72px] md:w-24 md:h-24 rounded-full object-cover border-2 border-zinc-800 shadow text-lg"
+                iconSize={24}
               />
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -272,7 +334,7 @@ export default function Profile() {
                   TOTAL REPUTATION
                 </span>
                 <span className="text-lg font-display font-black text-brand-orange tracking-wider">
-                  {profile.garageReputation.toLocaleString()} GR
+                  {garageReputation.toLocaleString()} GR
                 </span>
               </div>
               <div>
@@ -285,7 +347,7 @@ export default function Profile() {
               </div>
               <div className="col-span-2 pt-2 border-t border-zinc-900 flex items-center gap-1.5 text-[9px] text-zinc-500 font-display font-bold uppercase tracking-widest">
                 <Calendar size={12} className="text-brand-orange" />
-                <span>Joined PISTON: {new Date(profile.createdAt).toLocaleDateString()}</span>
+                <span>Joined PISTON: {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'Recently'}</span>
               </div>
             </div>
           </div>
@@ -361,10 +423,11 @@ export default function Profile() {
 
             <div className="absolute left-0 right-0 top-5 z-20 flex items-center justify-between px-4 py-3">
               <div className="flex min-w-0 items-center gap-3">
-                <img
-                  src={profile.profileImage}
-                  alt={profile.displayName}
-                  className="h-10 w-10 rounded-full border border-brand-orange/60 object-cover"
+                <UserAvatar
+                  src={profileImage}
+                  name={profile.displayName}
+                  className="h-10 w-10 rounded-full border border-brand-orange/60 object-cover text-xs"
+                  iconSize={16}
                 />
                 <div className="min-w-0">
                   <div className="truncate text-sm font-bold text-white">@{profile.username}</div>
@@ -451,7 +514,7 @@ export default function Profile() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {BADGES.map((badge) => {
-            const isEarned = profile.badges.includes(badge.id);
+            const isEarned = badges.includes(badge.id);
             return (
               <div
                 key={badge.id}
@@ -494,18 +557,26 @@ export default function Profile() {
           <p className="text-xs text-zinc-500 italic">No cars in lineup yet.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {cars.map((car) => (
+            {cars.map((car) => {
+              const carImage = car.photos?.[0] || car.imageUrl || car.mediaUrl || '';
+              return (
               <div
                 key={car.id}
                 className="glass-panel rounded-xl overflow-hidden flex"
               >
                 {/* Photo (fixed square thumb) */}
                 <div className="w-1/3 min-w-[120px] bg-zinc-950 relative">
-                  <img
-                    src={car.photos[0]}
-                    alt={`${car.year} ${car.make} ${car.model}`}
-                    className="w-full h-full object-cover"
-                  />
+                  {carImage ? (
+                    <img
+                      src={carImage}
+                      alt={`${car.year} ${car.make} ${car.model}`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full min-h-[150px] w-full items-center justify-center bg-zinc-950 text-[10px] font-display font-bold uppercase tracking-widest text-zinc-600">
+                      No Image
+                    </div>
+                  )}
                   {car.isVerified && (
                     <div className="absolute top-1.5 right-1.5 bg-brand-orange text-black p-0.5 rounded-full border border-black">
                       <ShieldCheck size={12} className="stroke-[2.5]" />
@@ -548,7 +619,8 @@ export default function Profile() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

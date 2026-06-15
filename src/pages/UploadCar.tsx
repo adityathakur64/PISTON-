@@ -4,6 +4,10 @@ import { Plus, X, Upload, CheckCircle, Flame, ShieldCheck } from 'lucide-react';
 import { authService, dbService } from '../services/firebase';
 import { calculateCarGR } from '../services/reputationService';
 
+const MAX_PHOTOS = 5;
+const MAX_PHOTO_SIZE_MB = 10;
+const MAX_PHOTO_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024;
+
 const RARITY_OPTIONS = [
   { value: 'common', label: 'Common (1.0x)', desc: 'Standard production cars, hot hatches' },
   { value: 'uncommon', label: 'Uncommon (1.2x)', desc: 'Performance trims, enthusiast favorites' },
@@ -73,8 +77,26 @@ export default function UploadCar() {
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const files = Array.from(e.target.files);
+      const files = Array.from(e.target.files).slice(0, MAX_PHOTOS);
+      const invalidFile = files.find(file => !file.type.startsWith('image/'));
+      const oversizedFile = files.find(file => file.size > MAX_PHOTO_SIZE_BYTES);
+
+      if (invalidFile) {
+        e.target.value = '';
+        setSelectedPhotos([]);
+        setPhotoPreviews([]);
+        return setError('Please choose image files only.');
+      }
+
+      if (oversizedFile) {
+        e.target.value = '';
+        setSelectedPhotos([]);
+        setPhotoPreviews([]);
+        return setError(`Each photo must be ${MAX_PHOTO_SIZE_MB}MB or smaller.`);
+      }
+
       setSelectedPhotos(files);
+      setError('');
 
       // Create previews
       const previews: string[] = [];
@@ -93,6 +115,9 @@ export default function UploadCar() {
     }
     if (selectedPhotos.length === 0) {
       return setError('Please upload at least one photo of your build.');
+    }
+    if (!currentUser?.uid) {
+      return setError('Please sign in again before uploading your build.');
     }
 
     try {
@@ -384,11 +409,15 @@ export default function UploadCar() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !currentUser}
+            aria-busy={loading}
             className="w-full bg-brand-orange hover:bg-brand-orange-hover text-black font-display font-bold py-3 rounded-xl transition-all tracking-wider text-sm flex justify-center items-center gap-2"
           >
             {loading ? (
-              <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+              <>
+                <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                <span>UPLOADING BUILD...</span>
+              </>
             ) : (
               <>
                 <CheckCircle size={18} />

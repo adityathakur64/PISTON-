@@ -20,6 +20,7 @@ import {
 import { authService, dbService } from '../services/firebase';
 import type { UserProfile } from '../services/reputationService';
 import PistonLogo from './PistonLogo';
+import UserAvatar from './UserAvatar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -128,10 +129,11 @@ export default function Layout({ children }: LayoutProps) {
 
           <div className="m-4 shrink-0 rounded-xl border hairline bg-bg-card p-4">
             <Link to="/profile" className="flex items-center gap-3">
-              <img
-                src={profile?.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400'}
-                alt={profile?.displayName}
-                className="h-11 w-11 rounded-full border border-brand-orange/40 object-cover"
+              <UserAvatar
+                src={profile?.profileImage}
+                name={profile?.displayName}
+                className="h-11 w-11 rounded-full border border-brand-orange/40 object-cover text-xs"
+                iconSize={17}
               />
               <div className="min-w-0">
                 <div className="truncate text-sm font-bold text-white">{profile?.displayName}</div>
@@ -172,10 +174,11 @@ export default function Layout({ children }: LayoutProps) {
               <Bell size={18} />
             </button>
             <Link to="/profile" className="flex items-center gap-3">
-              <img
-                src={profile?.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400'}
-                alt={profile?.displayName}
-                className="h-10 w-10 rounded-full border border-brand-orange/35 object-cover"
+              <UserAvatar
+                src={profile?.profileImage}
+                name={profile?.displayName}
+                className="h-10 w-10 rounded-full border border-brand-orange/35 object-cover text-xs"
+                iconSize={16}
               />
               <span className="text-sm font-bold text-white">{profile?.username}</span>
               <ChevronDown size={15} className="text-zinc-500" />
