@@ -264,19 +264,29 @@ export default function Dashboard() {
               <span className="text-[10px] font-semibold text-zinc-600">Featured builds</span>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {reelPosts.map((post) => (
+              {reelPosts.map((post) => {
+                const postImage = post.photos?.[0] || post.imageUrl || post.mediaUrl || '';
+
+                return (
                 <div key={`reel-${post.id}`} className="relative aspect-[9/14] overflow-hidden rounded-xl bg-black">
-                  <img
-                    src={post.photos[0]}
-                    alt={`${post.make} ${post.model}`}
-                    className="h-full w-full object-cover"
-                  />
+                  {postImage ? (
+                    <img
+                      src={postImage}
+                      alt={`${post.make} ${post.model}`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center bg-zinc-950 px-2 text-center text-[10px] font-display font-bold uppercase tracking-widest text-zinc-600">
+                      No Image
+                    </div>
+                  )}
                   <Link to={`/profile/${post.owner.uid}`} className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/60 to-transparent p-2">
                     <div className="truncate text-[10px] font-bold text-white">@{post.owner.username}</div>
                     <div className="truncate text-[9px] text-zinc-400">{post.model}</div>
                   </Link>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -299,7 +309,10 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="space-y-5">
-            {feedPosts.map((post) => (
+            {feedPosts.map((post) => {
+              const postImage = post.photos?.[0] || post.imageUrl || post.mediaUrl || '';
+
+              return (
               <article key={post.id} className="glass-panel overflow-hidden rounded-xl">
                 <header className="flex items-center justify-between border-b hairline px-4 py-3">
                   <Link to={`/profile/${post.owner.uid}`} className="flex min-w-0 items-center gap-3">
@@ -322,11 +335,17 @@ export default function Dashboard() {
                 </header>
 
                 <div className="relative aspect-[4/3] bg-black sm:aspect-[16/10]">
-                  <img
-                    src={post.photos[0]}
-                    alt={`${post.year} ${post.make} ${post.model}`}
-                    className="h-full w-full object-cover"
-                  />
+                  {postImage ? (
+                    <img
+                      src={postImage}
+                      alt={`${post.year} ${post.make} ${post.model}`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center bg-zinc-950 text-xs font-display font-bold uppercase tracking-widest text-zinc-600">
+                      No Image
+                    </div>
+                  )}
                   <div className="absolute left-4 top-4 rounded-full bg-black/72 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-brand-orange backdrop-blur">
                     {post.rarity}
                   </div>
@@ -376,7 +395,8 @@ export default function Dashboard() {
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

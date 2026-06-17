@@ -2,13 +2,16 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, X, Upload, CheckCircle, Flame, ShieldCheck } from 'lucide-react';
 import { authService, dbService } from '../services/firebase';
+import type { AuthUser } from '../services/firebase';
 import { calculateCarGR } from '../services/reputationService';
+
+type Rarity = 'common' | 'uncommon' | 'rare' | 'exotic' | 'hypercar';
 
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_SIZE_MB = 10;
 const MAX_PHOTO_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024;
 
-const RARITY_OPTIONS = [
+const RARITY_OPTIONS: { value: Rarity; label: string; desc: string }[] = [
   { value: 'common', label: 'Common (1.0x)', desc: 'Standard production cars, hot hatches' },
   { value: 'uncommon', label: 'Uncommon (1.2x)', desc: 'Performance trims, enthusiast favorites' },
   { value: 'rare', label: 'Rare (1.5x)', desc: 'Limited edition, legacy models, high-demand builds' },
@@ -17,12 +20,12 @@ const RARITY_OPTIONS = [
 ];
 
 export default function UploadCar() {
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
   const [description, setDescription] = useState('');
-  const [rarity, setRarity] = useState<'common' | 'uncommon' | 'rare' | 'exotic' | 'hypercar'>('common');
+  const [rarity, setRarity] = useState<Rarity>('common');
   const [value, setValue] = useState(15000);
   const [buildQuality, setBuildQuality] = useState(5);
   const [isVerified, setIsVerified] = useState(false);
@@ -113,9 +116,6 @@ export default function UploadCar() {
     if (!make || !model || !year || !description) {
       return setError('Please fill in all core specifications.');
     }
-    if (selectedPhotos.length === 0) {
-      return setError('Please upload at least one photo of your build.');
-    }
     if (!currentUser?.uid) {
       return setError('Please sign in again before uploading your build.');
     }
@@ -124,7 +124,7 @@ export default function UploadCar() {
       setLoading(true);
       setError('');
       
-      await dbService.uploadPost(
+      await dbService.uploadCar(
         currentUser.uid,
         {
           make: make.trim(),
@@ -141,8 +141,8 @@ export default function UploadCar() {
       );
       
       navigate('/');
-    } catch (err: any) {
-      setError(err.message || 'Failed to upload vehicle.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload vehicle.');
     } finally {
       setLoading(false);
     }
@@ -241,17 +241,18 @@ export default function UploadCar() {
               2. Vehicle Photos
             </h2>
 
-            <div className="relative border-2 border-dashed hairline hover:border-brand-orange/50 transition-colors rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer bg-black/16">
+            <div className="relative border-2 border-dashed hairline rounded-xl p-6 flex flex-col items-center justify-center text-center bg-black/16 opacity-75">
               <input
                 type="file"
                 multiple
                 accept="image/*"
                 onChange={handlePhotoChange}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                disabled
+                className="absolute inset-0 w-full h-full opacity-0 cursor-not-allowed"
               />
               <Upload size={24} className="text-zinc-500 mb-2" />
-              <span className="text-xs font-semibold text-zinc-300">Choose Photos or Drag Files Here</span>
-              <span className="text-[10px] text-zinc-500 mt-1">Supports PNG, JPG (Max 5 files)</span>
+              <span className="text-xs font-semibold text-zinc-300">Photo Upload Coming Soon</span>
+              <span className="text-[10px] text-zinc-500 mt-1">Vehicle details will save to Firestore without media.</span>
             </div>
 
             {photoPreviews.length > 0 && (
@@ -327,7 +328,7 @@ export default function UploadCar() {
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => setRarity(opt.value as any)}
+                    onClick={() => setRarity(opt.value)}
                     className={`text-left border p-2.5 rounded-xl transition-all ${
                       rarity === opt.value
                         ? 'bg-orange-950/20 border-brand-orange text-brand-orange font-bold'
@@ -421,7 +422,7 @@ export default function UploadCar() {
             ) : (
               <>
                 <CheckCircle size={18} />
-                <span>SUBMIT BUILD TO GARAGE</span>
+                <span>ADD BUILD TO GARAGE</span>
               </>
             )}
           </button>

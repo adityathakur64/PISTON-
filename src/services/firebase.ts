@@ -5,6 +5,7 @@ import {
   onAuthStateChanged as fbOnAuthStateChanged, 
   updateProfile as fbUpdateProfile
 } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { 
   doc, 
   getDoc, 
@@ -19,7 +20,8 @@ import {
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '../firebase.js';
 import type { CarData, StoryData, UserProfile } from './reputationService';
-import { calculateCarGR, getGarageRank, evaluateBadges } from './reputationService';
+import { calculateCarGR } from './reputationService';
+import { calculateGarageStats, calculateLeaderboardBadges } from './scoringService';
 
 const FIREBASE_UPLOAD_TIMEOUT_MS = 45000;
 const MOCK_FILE_READ_TIMEOUT_MS = 15000;
@@ -64,7 +66,7 @@ const assertFirebaseServices = () => {
   }
 };
 
-const getUploadBuildPhotoUrls = async (_uid: string, _carId: string, _photoFiles: File[]): Promise<string[]> => {
+const getUploadBuildPhotoUrls = async (): Promise<string[]> => {
   if (!STORAGE_UPLOADS_ENABLED) {
     return [];
   }
@@ -305,6 +307,13 @@ const seedCarOwners: Record<string, string> = {
   seed_car_5_1: 'seed_user_5',
 };
 
+export interface AuthUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
+
 const getCarOwnerUid = (car: CarData): string | undefined => {
   return car.userId || car.ownerUid || seedCarOwners[car.id];
 };
@@ -326,24 +335,28 @@ const getStoryExpiresAt = (story: StoryData): number => {
 };
 
 const buildProfileStats = (profile: UserProfile, cars: CarData[]) => {
-  const newTotalGR = cars.reduce((acc, car) => acc + (car.calculatedScore || 0), 0);
-  const rankInfo = getGarageRank(newTotalGR);
-  const updatedProfile = {
-    ...profile,
-    garageReputation: newTotalGR,
-    rank: rankInfo.current.title,
-  };
+  return calculateGarageStats(profile, cars);
+};
+
+const getDefaultUserProfile = (uid: string, displayName = 'Driver'): UserProfile => {
+  const username = displayName.toLowerCase().trim().replace(/[^a-z0-9_]/g, '') || 'driver';
 
   return {
-    garageReputation: newTotalGR,
-    rank: rankInfo.current.title,
-    badges: evaluateBadges(updatedProfile, cars),
+    uid,
+    username,
+    displayName,
+    bio: '',
+    profileImage: '',
+    garageReputation: 0,
+    rank: 'Street Rookie',
+    badges: [],
+    createdAt: Date.now(),
   };
 };
 
 // Stateful mock auth listener & storage
-let mockCurrentUser: any = null;
-const mockAuthCallbacks: ((user: any) => void)[] = [];
+let mockCurrentUser: AuthUser | null = null;
+const mockAuthCallbacks: ((user: AuthUser | User | null) => void)[] = [];
 
 // Helper to trigger mock auth changes
 const triggerMockAuthChange = () => {
@@ -366,7 +379,7 @@ export const authService = {
     }
   },
 
-  subscribeToAuthChanges(callback: (user: any) => void) {
+  subscribeToAuthChanges(callback: (user: AuthUser | User | null) => void) {
     if (isFirebaseConfigured) {
       return fbOnAuthStateChanged(auth, callback);
     } else {
@@ -384,7 +397,7 @@ export const authService = {
     }
   },
 
-  async login(email: string, password: string): Promise<any> {
+  async login(email: string, password: string): Promise<AuthUser | User> {
     if (isFirebaseConfigured) {
       const credential = await fbSignIn(auth, email, password);
       return credential.user;
@@ -424,7 +437,7 @@ export const authService = {
     }
   },
 
-  async signup(email: string, password: string, username: string, displayName: string): Promise<any> {
+  async signup(email: string, password: string, username: string, displayName: string): Promise<AuthUser | User> {
     const cleanUsername = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
     
     if (isFirebaseConfigured) {
@@ -650,14 +663,13 @@ export const dbService = {
     const storyId = 'story_' + Date.now();
     const createdAt = Date.now();
     const expiresAt = createdAt + 24 * 60 * 60 * 1000;
-    let mediaUrl = '';
     const profile = await this.getUserProfile(uid);
     const username = profile?.username || 'driver';
     const userAvatar = profile?.profileImage || '';
 
     if (isFirebaseConfigured) {
       assertFirebaseServices();
-      mediaUrl = EMPTY_MEDIA_URL;
+      const mediaUrl = EMPTY_MEDIA_URL;
 
       const fullStoryData: StoryData = {
         id: storyId,
@@ -680,7 +692,7 @@ export const dbService = {
       );
       return fullStoryData;
     } else {
-      mediaUrl = await readFileAsDataUrl(mediaFile);
+      const mediaUrl = await readFileAsDataUrl(mediaFile);
 
       const fullStoryData: StoryData = {
         id: storyId,
@@ -706,43 +718,28 @@ export const dbService = {
   async getLeaderboard(): Promise<UserProfile[]> {
     if (isFirebaseConfigured) {
       const profilesRef = collection(db, 'users');
-      // Order by reputation score descending
       const q = query(profilesRef, orderBy('garageReputation', 'desc'));
       const snapshots = await getDocs(q);
-      const list = snapshots.docs.map(doc => doc.data() as UserProfile);
-      
-      // Update top_10 badges dynamically based on live rankings
-      return list;
+      return calculateLeaderboardBadges(snapshots.docs.map(doc => doc.data() as UserProfile));
     } else {
       const dbState = getMockDB();
-      // Sort users by garageReputation
       const sorted = [...dbState.users].sort((a, b) => b.garageReputation - a.garageReputation);
-      
-      // Dynamically add top 10 badges to top accounts
-      return sorted.map((user, index) => {
-        const badges = [...user.badges];
-        if (index < 10 && !badges.includes('top_10')) {
-          badges.push('top_10');
-        } else if (index >= 10 && badges.includes('top_10')) {
-          const idx = badges.indexOf('top_10');
-          badges.splice(idx, 1);
-        }
-        return { ...user, badges };
-      });
+      return calculateLeaderboardBadges(sorted);
     }
   },
 
   async uploadPost(
     uid: string, 
     carData: Omit<CarData, 'id' | 'createdAt' | 'upvotes' | 'photos' | 'calculatedScore'>,
-    photoFiles: File[]
+    photoFiles: File[] = []
   ): Promise<CarData> {
     const calculatedScore = calculateCarGR({ ...carData, upvotes: 0, photos: [] });
     const carId = 'car_' + Date.now();
+    void photoFiles;
     const profile = await this.getUserProfile(uid);
     const username = profile?.username || 'driver';
 
-    const photoUrls = await getUploadBuildPhotoUrls(uid, carId, photoFiles);
+    const photoUrls = await getUploadBuildPhotoUrls();
     const primaryImageUrl = photoUrls[0] || EMPTY_MEDIA_URL;
 
     if (isFirebaseConfigured) {
@@ -779,42 +776,32 @@ export const dbService = {
         'Saving the car post took too long. Check Firestore rules and try again.'
       );
 
-      // Re-calculate user total score & badges
       const userDocRef = doc(db, 'users', uid);
       const userSnap = await withTimeout(
         getDoc(userDocRef),
         FIREBASE_UPLOAD_TIMEOUT_MS,
         'Loading your profile took too long after upload. Refresh and check your garage.'
       );
-      if (userSnap.exists()) {
-        const currentProfile = userSnap.data() as UserProfile;
-        const userCarsRef = collection(db, 'cars');
-        const carsSnap = await withTimeout(
-          getDocs(query(userCarsRef, where('userId', '==', uid))),
-          FIREBASE_UPLOAD_TIMEOUT_MS,
-          'Recalculating your garage score took too long. Refresh and check your garage.'
-        );
-        const cars = carsSnap.docs.map(doc => doc.data() as CarData);
-        
-        const newTotalGR = cars.reduce((acc, car) => acc + (car.calculatedScore || 0), 0);
-        const rankInfo = getGarageRank(newTotalGR);
-        const updatedProfile = {
-          ...currentProfile,
-          garageReputation: newTotalGR,
-          rank: rankInfo.current.title
-        };
-        const newBadges = evaluateBadges(updatedProfile, cars);
-        
-        await withTimeout(
-          updateDoc(userDocRef, {
-            garageReputation: newTotalGR,
-            rank: rankInfo.current.title,
-            badges: newBadges
-          }),
-          FIREBASE_UPLOAD_TIMEOUT_MS,
-          'Updating your garage score took too long. Refresh and check your garage.'
-        );
+      const currentProfile = userSnap.exists()
+        ? userSnap.data() as UserProfile
+        : getDefaultUserProfile(uid, profile?.displayName || username);
+      if (!userSnap.exists()) {
+        await setDoc(userDocRef, currentProfile);
       }
+
+      const carsSnap = await withTimeout(
+        getDocs(query(collection(db, 'cars'), where('userId', '==', uid))),
+        FIREBASE_UPLOAD_TIMEOUT_MS,
+        'Recalculating your garage score took too long. Refresh and check your garage.'
+      );
+      const cars = carsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CarData));
+      const stats = buildProfileStats(currentProfile, cars);
+
+      await withTimeout(
+        updateDoc(userDocRef, stats),
+        FIREBASE_UPLOAD_TIMEOUT_MS,
+        'Updating your garage score took too long. Refresh and check your garage.'
+      );
 
       return fullCarData;
     } else {
@@ -861,7 +848,7 @@ export const dbService = {
   async uploadCar(
     uid: string,
     carData: Omit<CarData, 'id' | 'createdAt' | 'upvotes' | 'photos' | 'calculatedScore'>,
-    photoFiles: File[]
+    photoFiles: File[] = []
   ): Promise<CarData> {
     return this.uploadPost(uid, carData, photoFiles);
   },
@@ -925,16 +912,10 @@ export const dbService = {
         if (ownerUid) {
           const ownerProfile = await this.getUserProfile(ownerUid);
           const userCarsSnap = await getDocs(query(collection(db, 'cars'), where('userId', '==', ownerUid)));
-          const cars = userCarsSnap.docs.map(doc => doc.data() as CarData);
-          const newTotalGR = cars.reduce((acc, c) => acc + (c.calculatedScore || 0), 0);
-          const rankInfo = getGarageRank(newTotalGR);
-          const newBadges = ownerProfile ? evaluateBadges(ownerProfile, cars) : [];
-
-          await updateDoc(doc(db, 'users', ownerUid), {
-            garageReputation: newTotalGR,
-            rank: rankInfo.current.title,
-            badges: newBadges
-          });
+          if (ownerProfile) {
+            const cars = userCarsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CarData));
+            await updateDoc(doc(db, 'users', ownerUid), buildProfileStats(ownerProfile, cars));
+          }
         }
       }
     } else {
