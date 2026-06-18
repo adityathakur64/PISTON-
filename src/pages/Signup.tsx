@@ -13,12 +13,20 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const getErrorMessage = (err: unknown) => {
+    return err instanceof Error ? err.message : 'Failed to create account.';
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || !username || !displayName) {
+    const cleanEmail = email.trim();
+    const cleanDisplayName = displayName.trim();
+    const cleanUsername = username.trim();
+
+    if (!cleanEmail || !password || !cleanUsername || !cleanDisplayName) {
       return setError('Please fill in all fields.');
     }
-    if (username.length < 3) {
+    if (cleanUsername.length < 3) {
       return setError('Username must be at least 3 characters.');
     }
     if (password.length < 6) {
@@ -28,10 +36,10 @@ export default function Signup() {
     try {
       setError('');
       setLoading(true);
-      await authService.signup(email, password, username, displayName);
+      await authService.signup(cleanEmail, password, cleanUsername, cleanDisplayName);
       navigate('/');
-    } catch (err: any) {
-      setError(err.message || 'Failed to create account.');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -81,6 +89,7 @@ export default function Signup() {
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Dominic Toretto"
                   disabled={loading}
+                  autoComplete="name"
                   className="block w-full pl-10 pr-3 py-2 field-surface rounded-lg text-sm text-white placeholder-zinc-600 focus:outline-none"
                 />
               </div>
@@ -100,6 +109,7 @@ export default function Signup() {
                   onChange={(e) => cleanUsernameInput(e.target.value)}
                   placeholder="charger_69"
                   disabled={loading}
+                  autoComplete="username"
                   className="block w-full pl-10 pr-3 py-2 field-surface rounded-lg text-sm text-white placeholder-zinc-600 focus:outline-none font-mono"
                 />
               </div>
@@ -122,6 +132,7 @@ export default function Signup() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="toretto@dodge.com"
                   disabled={loading}
+                  autoComplete="email"
                   className="block w-full pl-10 pr-3 py-2 field-surface rounded-lg text-sm text-white placeholder-zinc-600 focus:outline-none"
                 />
               </div>
@@ -141,6 +152,7 @@ export default function Signup() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Password (Min 6 characters)"
                   disabled={loading}
+                  autoComplete="new-password"
                   className="block w-full pl-10 pr-3 py-2 field-surface rounded-lg text-sm text-white placeholder-zinc-600 focus:outline-none"
                 />
               </div>
